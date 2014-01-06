@@ -1,0 +1,20 @@
+apply plugin: 'java'
+apply plugin: 'eclipse'
+
+jar {
+	manifest {
+		attributes 'Main-Class':'view.ServerMainWindow'
+	}
+}
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+	testCompile group: 'junit', name: 'junit', version: '4.+' 
+}
+
+task run(dependsOn: jar) << {
+	ant.java(jar:"${libsDir}${File.separator}${archivesBaseName}.jar",fork:true)
+}
