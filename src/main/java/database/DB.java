@@ -41,51 +41,51 @@ public class DB {
 	
 	private void createTables() throws SQLException {
 		statement = connection.createStatement();
-		statement.executeUpdate("CREATE TABLE IF NOT EXISTS users ("
-				+ "id int(1) NOT NULL AUTO_INCREMENT, "
-				+ "username varchar(10) NOT NULL, "
-				+ "password varchar(45) NOT NULL, "
-				+ "salt varchar(20) NOT NULL, "
-				+ "RIMARY KEY  (id), "
-				+ "UNIQUE KEY username (username) "
+		statement.executeUpdate("CREATE TABLE IF NOT EXISTS `users` ("
+				+ "`id` int(11) NOT NULL AUTO_INCREMENT, "
+				+ "`username` varchar(10) NOT NULL, "
+				+ "`password` varchar(45) NOT NULL, "
+				+ "`salt` varchar(20) NOT NULL, "
+				+ "PRIMARY KEY  (`id`), "
+				+ "UNIQUE KEY `username` (`username`) "
 				+ ") ENGINE=MyISAM  DEFAULT CHARSET=latin2 AUTO_INCREMENT=3 ;");
 		
 		statement = connection.createStatement();
-		statement.executeUpdate("CREATE TABLE IF NOT EXISTS groups ("
-				+ "id int(1) NOT NULL AUTO_INCREMENT, "
-				+ "group varchar(10) NOT NULL, "
-				+ "PRIMARY KEY  (id), "
-				+ "UNIQUE KEY group (group) "
+		statement.executeUpdate("CREATE TABLE IF NOT EXISTS `groups` ("
+				+ "`id` int(11) NOT NULL AUTO_INCREMENT, "
+				+ "`group` varchar(10) NOT NULL, "
+				+ "PRIMARY KEY  (`id`), "
+				+ "UNIQUE KEY `group` (`group`) "
 				+ ") ENGINE=MyISAM  DEFAULT CHARSET=latin2 AUTO_INCREMENT=2 ;");
 		
 		statement = connection.createStatement();
-		statement.executeUpdate("INSERT INTO groups (id, group) VALUES "
+		statement.executeUpdate("INSERT INTO `groups` (`id`, `group`) VALUES "
 				+ "(1, 'admin');");
 		
 		statement = connection.createStatement();
-		statement.executeUpdate("CREATE TABLE IF NOT EXISTS files ("
-				+ "id int(11) NOT NULL AUTO_INCREMENT, "
-				+ "filename varchar(50) NOT NULL, "
-				+ "owner_id int(11) NOT NULL, "
-				+ "group_id int(11) NOT NULL, "
-				+ "user_read tinyint(1) NOT NULL DEFAULT '1', "
-				+ "user_write tinyint(1) NOT NULL DEFAULT '1', "
-				+ "group_read tinyint(1) NOT NULL DEFAULT '0', "
-				+ "group_write tinyint(1) NOT NULL DEFAULT '0', "
-				+ "PRIMARY KEY  (id), "
-				+ "UNIQUE KEY filename (filename) "
+		statement.executeUpdate("CREATE TABLE IF NOT EXISTS `files` ("
+				+ "`id` int(11) NOT NULL AUTO_INCREMENT, "
+				+ "`filename` varchar(50) NOT NULL, "
+				+ "`owner_id` int(11) NOT NULL, "
+				+ "`group_id` int(11) NOT NULL, "
+				+ "`user_read` tinyint(1) NOT NULL DEFAULT '1', "
+				+ "`user_write` tinyint(1) NOT NULL DEFAULT '1', "
+				+ "`group_read` tinyint(1) NOT NULL DEFAULT '0', "
+				+ "`group_write` tinyint(1) NOT NULL DEFAULT '0', "
+				+ "PRIMARY KEY  (`id`), "
+				+ "UNIQUE KEY `filename` (`filename`) "
 				+ ") ENGINE=MyISAM  DEFAULT CHARSET=latin2 AUTO_INCREMENT=2 ;" );
 		
 		statement = connection.createStatement();
-		statement.executeUpdate("CREATE TABLE IF NOT EXISTS usergroup ("
-				+ "user_id int(11) NOT NULL, "
-				+ "group_id int(11) NOT NULL "
+		statement.executeUpdate("CREATE TABLE IF NOT EXISTS `usergroup` ("
+				+ "`user_id` int(11) NOT NULL, "
+				+ "`group_id` int(11) NOT NULL "
 				+") ENGINE=MyISAM DEFAULT CHARSET=latin2;");
 	}
 	
 	public void addUser(String username, String password, int salt) throws SQLException {
 		statement = connection.createStatement();
-		statement.executeUpdate("INSERT INTO users(username, password, salt) "
+		statement.executeUpdate("INSERT INTO `users`(`username`, `password`, `salt`) "
 				+ "VALUES ('" + username + "',PASSWORD(CONCAT(PASSWORD('"+ password + "')," + salt + "))," + salt + ")");
 	}
 	
@@ -93,29 +93,87 @@ public class DB {
 		int userID = getUserID(owner);
 		int groupID = getGroupIDOfUser(owner);
 		statement = connection.createStatement();
-		statement.executeUpdate("INSERT INTO files(filename, owner_id, group_id, user_read, user_write, group_read, group_write)"
+		statement.executeUpdate("INSERT INTO `files`(`filename`, `owner_id`, `group_id`, `user_read`, `user_write`, `group_read`, `group_write`)"
 				+ " VALUES ('" + filename + "','" + userID + "','" + groupID + "',TRUE,TRUE,TRUE,FALSE)");
 	}
 	
 	public void addUserToGroup(String user, String group) throws SQLException {
 		statement = connection.createStatement();
-		statement.executeUpdate("INSERT INTO usergroup(user_id,group_id) VALUES "
-				+ "(SELECT id FROM users WHERE username='" + user + "',SELECT id FROM groups WHERE group='" + group + "')");
+		statement.executeUpdate("INSERT INTO `usergroup`(`user_id`,`group_id`) VALUES "
+				+ "(SELECT `id` FROM `users` WHERE `username`='" + user + "',SELECT `id` FROM `groups` WHERE `group`='" + group + "')");
+	}
+	
+	public void deleteFile(String filename) throws SQLException {
+		statement = connection.createStatement();
+		statement.executeUpdate("DELETE FROM `files` WHERE `filename`='" + filename + "'");
+	}
+	
+	public void deleteUser(String username) throws SQLException {
+		statement = connection.createStatement();
+		statement.executeUpdate("DELETE FROM `users` WHERE `username`='" + username +"'");
+	}
+	
+	public void changeFileRights(String filename, String ownerRights, String groupRights) throws SQLException {
+		int owner = Integer.parseInt(ownerRights);
+		int group = Integer.parseInt(groupRights);
+		String[] rights = adjustRights(owner,group);
+		statement = connection.createStatement();
+		statement.executeUpdate("UPDATE `files` SET (`user_read`,`user_write`,`group_read`,`group_write`)"
+		+ " VALUES ('" + rights[0] + "', '" + rights[1] + "', '" + rights[2] + "', '"
+				+ rights[3] + "') WHERE `filename`='" + filename + "'");
+	}
+	
+	private String[] adjustRights (int ownerRights, int groupRights) {
+		String[] rights = new String[4];
+		String[] owner = transformRights(ownerRights);
+		String[] group = transformRights(groupRights);
+		rights[0]=owner[0];
+		rights[1]=owner[1];
+		rights[2]=group[0];
+		rights[3]=group[1];
+		return rights;
+	}
+	
+	private String[] transformRights(int rights) {
+		String[] newRights = new String[2];
+		if (rights==0) {
+			newRights[0]="FALSE";
+			newRights[1]="TRUE";
+		}
+		else if (rights==1) {
+			newRights[0]="TRUE";
+			newRights[1]="FALSE";
+		}
+		else if (rights==2) {
+			newRights[0]="FALSE";
+			newRights[1]="TRUE";
+		}
+		else {
+			newRights[0]="TRUE";
+			newRights[1]="TRUE";
+		}
+		return newRights;
+	}
+	
+	public boolean checkIfUserExists(String username) throws SQLException {
+		statement = connection.createStatement();
+		resultSet = statement.executeQuery("SELECT `username`='" + username + "' FROM `users`");
+		return check(resultSet.getString(1));
 	}
 	
 	public boolean checkUserPassword(String user, String password) throws SQLException {
 		statement = connection.createStatement();
-		resultSet = statement.executeQuery("SELECT password=PASSWORD(CONCAT(PASSWORD('" + password + "'),salt)) FROM "
-				+ "users WHERE username='" + user + "'");
+		resultSet = statement.executeQuery("SELECT `password`=PASSWORD(CONCAT(PASSWORD('" + password + "'),salt)) FROM "
+				+ "`users` WHERE `username`='" + user + "'");
 		return check(resultSet.getString(1));
 	}
 	
 	public boolean checkIfUserHavePermissionToRead(String user, String filename) throws SQLException {
 		statement = connection.createStatement();
 		int userID = getUserID(user);
-		resultSet = statement.executeQuery("SELECT group_read OR (user_read AND owner_id=" + userID + ") FROM "
-				+ "files AS f WHERE f.filename='" + filename + "' AND f.group_id IN (SELECT group_id FROM "
-				+ "usergroup WHERE user_id=" + userID + ")");
+		resultSet = statement.executeQuery("SELECT `group_read` OR (`user_read` AND `owner_id`=" + userID + ") FROM "
+				+ "`files` AS `f` WHERE `f`.`filename`='" + filename + "' AND `f`.`group_id` IN (SELECT `group_id` FROM "
+				+ "`usergroup` WHERE `user_id`=" + userID + ")");
 		return check(resultSet.getString(1));
 		
 	}
@@ -123,9 +181,9 @@ public class DB {
 	public boolean checkIfUserHavePermissionToWrite(String user, String filename) throws SQLException {
 		statement = connection.createStatement();
 		int userID = getUserID(user);
-		resultSet = statement.executeQuery("SELECT group_write OR (user_write AND owner_id=" + userID + ") FROM "
-				+ "files AS f WHERE f.filename='" + filename + "' AND f.group_id IN "
-				+ "(SELECT group_id FROM usergroup WHERE user_id=" + userID + ")");
+		resultSet = statement.executeQuery("SELECT `group_write` OR (`user_write` AND `owner_id`=" + userID + ") FROM "
+				+ "`files` AS `f` WHERE `f`.`filename`='" + filename + "' AND `f`.`group_id` IN "
+				+ "(SELECT `group_id` FROM `usergroup` WHERE `user_id`=" + userID + ")");
 		return check(resultSet.getString(1));
 	}
 	
@@ -149,7 +207,7 @@ public class DB {
 	
 	public ArrayList<String> getAllUsernames() throws SQLException {
 		statement = connection.createStatement();
-		resultSet = statement.executeQuery("SELECT username FROM users");
+		resultSet = statement.executeQuery("SELECT `username` FROM `users`");
 		ArrayList<String> usernames = new ArrayList<String>();
 		while (resultSet.next()) {
 			usernames.add(resultSet.getString(1));
@@ -159,7 +217,7 @@ public class DB {
 	
 	public String[] getInformationAboutUser(String username) throws SQLException {
 		statement = connection.createStatement();
-		resultSet = statement.executeQuery("SELECT * FROM users");
+		resultSet = statement.executeQuery("SELECT * FROM `users`");
 		if (resultSet.isBeforeFirst()) {
 			String[] informations = new String[3];
 			informations[0] = resultSet.getString(1);
@@ -172,10 +230,42 @@ public class DB {
 		}
 		else {
 			String[] error = new String[1];
-			error[0] = "Nothing";
+			error[0] = "error";
 			return error;
 		}
 		
+	}
+	
+	public String[] getFileInformations(String filename) throws SQLException {
+		statement = connection.createStatement();
+		resultSet = statement.executeQuery("SELECT * FROM `files` WHERE `filename`='" + filename + "'");
+		if (resultSet.isBeforeFirst()) {
+			String[] informations = new String[7];
+			informations[0] = resultSet.getString(1);
+			informations[1] = getUserByID(resultSet.getString(3));
+			informations[2] = getGroupByID(resultSet.getString(4));
+			for (int i=0;i<4;i++) {
+				informations[3+i] = resultSet.getString(5+i);
+			}
+			return informations;
+		}
+		else {
+			String[] error = new String[1];
+			error[0] = "error";
+			return error;
+		}
+	}
+	
+	public String getUserByID(String userID) throws SQLException {
+		statement = connection.createStatement();
+		resultSet = statement.executeQuery("SELECT `username` FROM `users` WHERE `id`=" + userID);
+		return resultSet.getString(1);
+	}
+	
+	public String getGroupByID(String groupID) throws SQLException {
+		statement = connection.createStatement();
+		resultSet = statement.executeQuery("SELECT `group` FROM `groups` WHERE `id`=" + groupID);
+		return resultSet.getString(1);
 	}
 
 }

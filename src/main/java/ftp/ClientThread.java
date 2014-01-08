@@ -24,11 +24,15 @@ import java.nio.file.attribute.PosixFileAttributeView;
 import java.nio.file.attribute.PosixFileAttributes;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.nio.file.attribute.UserPrincipal;
+import java.security.acl.Owner;
+import java.sql.SQLException;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.Timer;
 import java.util.TimerTask;
+
+import database.DB;
 
 /**
  * @author Jakub Fortunka
@@ -49,13 +53,18 @@ public class ClientThread implements Runnable {
 	private Timer disconnectTimer = null;
 	private TimerTask disconnectTask = null;
 	
+	private DB database = null;
+	
 	private PrintWriter messageToClient;
+	
+	String user = null;
 
-	public ClientThread(Socket client, String parentDirectory) {
+	public ClientThread(Socket client, String parentDirectory, DB database) {
 		clientSocket = client;
 		virtualPath = "/";
 		systemPath = parentDirectory;
 		parentPath = parentDirectory;
+		this.database = database;
 	}
 
 
@@ -81,6 +90,9 @@ public class ClientThread implements Runnable {
 				cancelDisconectDeamon();
 			}
 			else e.printStackTrace();
+		} catch (SQLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
 		}
 	}
 	
@@ -90,7 +102,7 @@ public class ClientThread implements Runnable {
 		messageToClient.println("220 You will be disconnected after 3 minutes of inactivity.");
 	}
 	
-	private void doRequestedCommand(String input) throws IOException {
+	private void doRequestedCommand(String input) throws IOException, SQLException {
 		resetDisconnectionTimer();
 		if (input.startsWith("USER")) checkUser(input);
 		else if (input.startsWith("PASS")) checkPassword(input);
@@ -114,20 +126,25 @@ public class ClientThread implements Runnable {
 
 	/**
 	 * @param input
+	 * @throws SQLException 
 	 */
-	private void checkUser(String input) {
+	private void checkUser(String input) throws SQLException {
 		String username = getContentFromCommand(input);
-		if (username.equals("Kuba")) messageToClient.println("331 Password required");
+		if (database.checkIfUserExists(username)) {
+			this.user = username;
+			messageToClient.println("331 Password required");
+		}
 		else messageToClient.println("430 Invalid username");
 	}
 
 
 	/**
 	 * @param input
+	 * @throws SQLException 
 	 */
-	private void checkPassword(String input) {
+	private void checkPassword(String input) throws SQLException {
 		String pass = getContentFromCommand(input);
-		if (pass.equals("test")) messageToClient.println("230 User logged in");
+		if (database.checkUserPassword(user, pass)) messageToClient.println("230 User logged in");
 		else messageToClient.println("430 Invalid password");
 	}
 
@@ -199,6 +216,7 @@ public class ClientThread implements Runnable {
 	private void getFile(String input, boolean b) throws IOException {
 		String filename = getContentFromCommand(input);
 		File f = new File(systemPath + File.separator + filename);
+		//database.addFile(filename, user);
 		BufferedInputStream in = new BufferedInputStream(dataSocket.getInputStream());
 		BufferedOutputStream out = new BufferedOutputStream(new FileOutputStream(f));
 		messageToClient.println("150 FILE: " + filename);
@@ -229,6 +247,7 @@ public class ClientThread implements Runnable {
 		File f;
 		if (file.startsWith("/")) f = new File(parentPath + file.substring(1));
 		else f = new File(systemPath + File.separator + file);
+		//database.deleteFile(f.getName());
 		f.delete();
 		if (operation.equals("R")) messageToClient.println("250 RMD was successful");
 		else messageToClient.println("250 DELE was successful");
@@ -243,6 +262,7 @@ public class ClientThread implements Runnable {
 		File f;
 		if (directoryName.startsWith("/")) f = new File(parentPath + directoryName.substring(1));
 		else f = new File(systemPath + File.separator + directoryName);
+	//	database.addFile(f.getName(), user);
 		f.mkdir();
 	}
 
@@ -257,13 +277,14 @@ public class ClientThread implements Runnable {
 
 	/**
 	 * @throws IOException 
+	 * @throws SQLException 
 	 */
-	private void list() throws IOException {
+	private void list() throws IOException, SQLException {
 		messageToClient.println("150 Accepted data connection");
 		PrintWriter sendList = new PrintWriter(dataSocket.getOutputStream(), true);
-		/*File[] list = new File(systemPath).listFiles();
+		File[] list = new File(systemPath).listFiles();
 		for (File f : list) {
-			String rigths;
+			/*String rigths;
 			if (f.isDirectory()) rigths="d";
 			else rigths="-";
 			Path file = Paths.get(f.getAbsolutePath());
@@ -282,7 +303,7 @@ public class ClientThread implements Runnable {
 			String time;
 			SimpleDateFormat format;
 			if (fileTime.get(Calendar.YEAR) == currentYear) {
-				format = new SimpleDateFormat("MM  dd H:m");
+				format = new SimpleDateFormat("MMM  dd H:m");
 			}
 			else {
 				format = new SimpleDateFormat("MM dd YYYY");
@@ -291,9 +312,37 @@ public class ClientThread implements Runnable {
 			time = format.format(date);
 			String filename = f.getName();
 			String line = rigths + "  " + hardLinks + "  " + owner + "  " + group + "  " + size + "  " + time + "  " + filename;
-			sendList.println(line);
-		}*/
-		sendList.println("drwx--x--x    3 a4417886   a4417886         4096 Jan  3 18:27 ..");
+			sendList.println(line);*/
+			String[] info = database.getFileInformations(f.getName());
+			String rights = null;
+			if (f.isDirectory()) rights="d";
+			else rights="-";
+			if (info[3].equals("1")) rights+="r";
+			else rights+="-";
+			if (info[4].equals("1")) rights+="w";
+			else rights+="-";
+			if (info[5].equals("1")) rights+="r";
+			else rights+="-";
+			if (info[6].equals("1")) rights+="w";
+			else rights+="-";
+			
+			Calendar fileTime = Calendar.getInstance();
+			fileTime.setTimeInMillis(f.lastModified());
+			int currentYear = Calendar.getInstance().get(Calendar.YEAR);
+			String time;
+			SimpleDateFormat format;
+			if (fileTime.get(Calendar.YEAR) == currentYear) {
+				format = new SimpleDateFormat("MMM  dd H:m");
+			}
+			else {
+				format = new SimpleDateFormat("MM dd YYYY");
+			}
+			Date date = new Date(f.lastModified());
+			time = format.format(date);
+			
+			sendList.println(rights + "  " + info[0] + "  " + info[1] + "  " + info[2] + "  " + f.length() + "  " + time + "  " + f.getName());
+		}
+		//sendList.println("drwx--x--x    3 a4417886   a4417886         4096 Jan  3 18:27 ..");
 		dataSocket.close();
 		dataSocketServer.close();
 		messageToClient.println("226 Transfer complete");
@@ -318,9 +367,15 @@ public class ClientThread implements Runnable {
 
 	/**
 	 * @param input
+	 * @throws SQLException 
 	 */
-	private void changeRights(String input) {
-		// TODO Auto-generated method stub
+	private void changeRights(String input) throws SQLException {
+		String line = getContentFromCommand(input);
+		String filename = line.substring(0, line.indexOf(" ") +1 );
+		String rights = getContentFromCommand(line);
+		String ownerRights = String.valueOf(rights.charAt(0));
+		String groupRights = String.valueOf(rights.charAt(1));
+		database.changeFileRights(filename, ownerRights, groupRights);
 		
 	}
 

@@ -10,6 +10,8 @@ import java.net.Socket;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import database.DB;
+
 /**
  * @author Jakub Fortunka
  *
@@ -22,6 +24,8 @@ public class Server implements Runnable {
 	protected Thread runningThread= null;
 	protected ExecutorService threadPool = Executors.newFixedThreadPool(2);
 	
+	private DB database = null;
+	
 	private File parentDirectory;
 
 	public Server() throws IOException {
@@ -29,9 +33,10 @@ public class Server implements Runnable {
 		getParentDirectory();
 	}
 
-	public Server(int port) throws IOException {
+	public Server(int port, DB database) throws IOException {
 		//createServer(port);
 		serverPort = port;
+		this.database = database;
 		getParentDirectory();
 	}
 
@@ -62,7 +67,7 @@ public class Server implements Runnable {
 				}
 				throw new RuntimeException("Error accepting client connection", e);
 			}
-			this.threadPool.execute(new ClientThread(clientSocket, parentDirectory.getAbsolutePath()));
+			this.threadPool.execute(new ClientThread(clientSocket, parentDirectory.getAbsolutePath(),database));
 		}
 		this.threadPool.shutdown();
 		System.out.println("Server Stopped.");

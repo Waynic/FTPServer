@@ -16,7 +16,6 @@ import javax.swing.BoxLayout;
 import javax.swing.JLabel;
 import javax.swing.JButton;
 import javax.swing.JList;
-
 import java.awt.Color;
 
 import javax.swing.JTextField;
@@ -33,6 +32,9 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+
+import javax.swing.JScrollPane;
+import javax.swing.SwingConstants;
 
 /**
  * @author Jakub Fortunka
@@ -122,37 +124,22 @@ public class ServerMainWindow {
 		frmFtpServer.getContentPane().add(usersList, BorderLayout.WEST);
 		usersList.setLayout(new BoxLayout(usersList, BoxLayout.Y_AXIS));
 		
+		JScrollPane listScrollPane = new JScrollPane();
+		usersList.add(listScrollPane);
+		
 		JLabel lblDatabase = new JLabel("database");
-		usersList.add(lblDatabase);
-		
-		JPanel databaseButtons = new JPanel();
-		usersList.add(databaseButtons);
-		
-		JButton btnAddUser = new JButton("add user");
-		btnAddUser.addActionListener(new ActionListener() {
-			public void actionPerformed(ActionEvent arg0) {
-				try {
-					addUser();
-				} catch (SQLException e) {
-					throwException(e);
-				}
-				
-			}
-		});
-		databaseButtons.add(btnAddUser);
-		
-		/*JButton btnRemoveUser = new JButton("remove user");
-		btnRemoveUser.addActionListener(new ActionListener() {
-			public void actionPerformed(ActionEvent e) {
-				removeUser();
-			}
-		});
-		databaseButtons.add(btnRemoveUser);*/
+		lblDatabase.setHorizontalAlignment(SwingConstants.CENTER);
+		//usersList.add(lblDatabase);
 		
 		list = new JList<String>();
 		listModel = new DefaultListModel<String>();
 		list.setModel(listModel);
-		usersList.add(list);
+		//usersList.add(list);
+		
+		listScrollPane.setViewportView(list);
+		list.setVisibleRowCount(10);
+		
+		listScrollPane.setColumnHeaderView(lblDatabase);
 		
 		list.addMouseListener(new MouseAdapter() {
        	 public void mouseClicked(MouseEvent e) {
@@ -172,6 +159,35 @@ public class ServerMainWindow {
        	    }
 		});
 		
+		JPanel dbButtonsPanel = new JPanel();
+		usersList.add(dbButtonsPanel);
+		
+		JButton btnAddUser = new JButton("add user");
+		dbButtonsPanel.add(btnAddUser);
+		
+		JButton btnRemoveUser = new JButton("remove user");
+		dbButtonsPanel.add(btnRemoveUser);
+		btnRemoveUser.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				try {
+					removeUser();
+				} catch (SQLException e1) {
+					throwException(e1);
+				}
+			}
+		});
+		btnAddUser.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent arg0) {
+				try {
+					addUser();
+				} catch (SQLException e) {
+					throwException(e);
+				}
+				
+			}
+		});
+		
+		
 		JPanel userDetails = new JPanel();
 		userDetails.setBackground(new Color(224, 255, 255));
 		frmFtpServer.getContentPane().add(userDetails, BorderLayout.CENTER);
@@ -186,26 +202,38 @@ public class ServerMainWindow {
 		} catch (InstantiationException | IllegalAccessException
 				| ClassNotFoundException | SQLException e2) {
 			e2.printStackTrace();
+			JOptionPane.showMessageDialog(frmFtpServer,
+					"Database is not working!",
+					"Problem!",
+					JOptionPane.WARNING_MESSAGE);
+			return ;
 		}
 		
 	}
 	
 	private void startServer() {
 		try {
-			server = new Server(Integer.parseInt(textField.getText()));
-			new Thread(server).start();
+			if (database == null) {
+				throw new IOException("Can't work without Database!");
+			}
+			else {
+				server = new Server(Integer.parseInt(textField.getText()), database);
+				new Thread(server).start();
+				lblServerStatus.setText("Server status: working!");
+			}
 		} catch (NumberFormatException e) {
 			throwException(e);
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
 			throwException(e);
 		}
-		lblServerStatus.setText("Server status: working!");
 	}
 	
 	private void stopServer() {
-		server.stop();
-		lblServerStatus.setText("Server status: not working");
+		if (server != null) {
+			server.stop();
+			lblServerStatus.setText("Server status: not working");
+		}
 	}
 	
 	private void addUser() throws SQLException {
@@ -227,16 +255,20 @@ public class ServerMainWindow {
 		}
 	}
 	
-	/*private void removeUser() {
+	private void removeUser() throws SQLException {
 		List<String> listOfUsersToDelete = list.getSelectedValuesList();
+		int[] indexes = list.getSelectedIndices();
+		int i = 0;
 		for (String username : listOfUsersToDelete) {
-			database.removeUser(username);
+			database.deleteUser(username);
+			list.remove(indexes[i]);
+			i++;
 		}
-	}*/
+	}
 	
 	private void showDetailInformationAboutUser(String user) throws SQLException {
 		String[] info = database.getInformationAboutUser(user);
-		if (!info[0].equals("Nothing")) {
+		if (!info[0].equals("error")) {
 			//do something
 		}
 	}

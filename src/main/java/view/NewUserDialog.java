@@ -71,8 +71,8 @@ public class NewUserDialog extends JDialog {
 		JButton btnOk = new JButton("OK");
 		btnOk.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
-				usernameTextField.setText("");
-				passwordField.setText("");
+			//	usernameTextField.setText("");
+			//	passwordField.setText("");
 				setVisible(false);
 			}
 		});
@@ -92,7 +92,10 @@ public class NewUserDialog extends JDialog {
 	
 	@Override
 	public void setVisible(boolean b) {
-		if (getUsername().equals("-1")) usernameTextField.setText("");
+		if (!getUsername().equals("") && b) {
+			usernameTextField.setText("");
+			passwordField.setText("");
+		}
 		super.setVisible(b);
 	}
 	
