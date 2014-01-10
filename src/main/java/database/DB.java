@@ -87,11 +87,18 @@ public class DB {
 		statement = connection.createStatement();
 		statement.executeUpdate("INSERT INTO `users`(`username`, `password`, `salt`) "
 				+ "VALUES ('" + username + "',PASSWORD(CONCAT(PASSWORD('"+ password + "')," + salt + "))," + salt + ")");
+		addGroup(username);
+		addUserToGroup(username, username);
+	}
+	
+	public void addGroup(String groupname) throws SQLException {
+		statement = connection.createStatement();
+		statement.executeUpdate("INSERT INTO `groups`(`group`) VALUES ('" + groupname + "')");
 	}
 	
 	public void addFile(String filename, String owner) throws SQLException {
 		int userID = getUserID(owner);
-		int groupID = getGroupIDOfUser(owner);
+		int groupID = getGroupIDsOfUser(owner).get(1);
 		statement = connection.createStatement();
 		statement.executeUpdate("INSERT INTO `files`(`filename`, `owner_id`, `group_id`, `user_read`, `user_write`, `group_read`, `group_write`)"
 				+ " VALUES ('" + filename + "','" + userID + "','" + groupID + "',TRUE,TRUE,TRUE,FALSE)");
@@ -100,7 +107,7 @@ public class DB {
 	public void addUserToGroup(String user, String group) throws SQLException {
 		statement = connection.createStatement();
 		statement.executeUpdate("INSERT INTO `usergroup`(`user_id`,`group_id`) VALUES "
-				+ "(SELECT `id` FROM `users` WHERE `username`='" + user + "',SELECT `id` FROM `groups` WHERE `group`='" + group + "')");
+				+ "((SELECT `id` FROM `users` WHERE `username`='" + user + "') , (SELECT `id` FROM `groups` WHERE `group`='" + group + "'))");
 	}
 	
 	public void deleteFile(String filename) throws SQLException {
@@ -111,6 +118,20 @@ public class DB {
 	public void deleteUser(String username) throws SQLException {
 		statement = connection.createStatement();
 		statement.executeUpdate("DELETE FROM `users` WHERE `username`='" + username +"'");
+		deleteGroup(username);
+		deleteConnectionBetweenUserAndGroup(username, username);
+	}
+	
+	public void deleteGroup(String groupname) throws SQLException {
+		statement = connection.createStatement();
+		statement.executeUpdate("DELETE FROM `groups` WHERE `group`='" + groupname + "'");
+	}
+	
+	public void deleteConnectionBetweenUserAndGroup(String username, String groupname) throws SQLException {
+		int userID = getUserID(username);
+		int groupID = getGroupID(groupname);
+		statement = connection.createStatement();
+		statement.executeUpdate("DELETE FROM `usergroup` WHERE `user_id`=" + userID + " AND `group_id`=" + groupID);
 	}
 	
 	public void changeFileRights(String filename, String ownerRights, String groupRights) throws SQLException {
@@ -157,15 +178,17 @@ public class DB {
 	
 	public boolean checkIfUserExists(String username) throws SQLException {
 		statement = connection.createStatement();
-		resultSet = statement.executeQuery("SELECT `username`='" + username + "' FROM `users`");
-		return check(resultSet.getString(1));
+		resultSet = statement.executeQuery("SELECT `username`='" + username + "' FROM `users` WHERE `username`='" + username +"'");
+		if (resultSet.next()) return check(resultSet.getString(1));
+		else return false;
 	}
 	
 	public boolean checkUserPassword(String user, String password) throws SQLException {
 		statement = connection.createStatement();
 		resultSet = statement.executeQuery("SELECT `password`=PASSWORD(CONCAT(PASSWORD('" + password + "'),salt)) FROM "
 				+ "`users` WHERE `username`='" + user + "'");
-		return check(resultSet.getString(1));
+		if (resultSet.next()) return check(resultSet.getString(1));
+		else return false;
 	}
 	
 	public boolean checkIfUserHavePermissionToRead(String user, String filename) throws SQLException {
@@ -174,8 +197,8 @@ public class DB {
 		resultSet = statement.executeQuery("SELECT `group_read` OR (`user_read` AND `owner_id`=" + userID + ") FROM "
 				+ "`files` AS `f` WHERE `f`.`filename`='" + filename + "' AND `f`.`group_id` IN (SELECT `group_id` FROM "
 				+ "`usergroup` WHERE `user_id`=" + userID + ")");
-		return check(resultSet.getString(1));
-		
+		if (resultSet.next()) return check(resultSet.getString(1));
+		else return false;
 	}
 	
 	public boolean checkIfUserHavePermissionToWrite(String user, String filename) throws SQLException {
@@ -184,7 +207,8 @@ public class DB {
 		resultSet = statement.executeQuery("SELECT `group_write` OR (`user_write` AND `owner_id`=" + userID + ") FROM "
 				+ "`files` AS `f` WHERE `f`.`filename`='" + filename + "' AND `f`.`group_id` IN "
 				+ "(SELECT `group_id` FROM `usergroup` WHERE `user_id`=" + userID + ")");
-		return check(resultSet.getString(1));
+		if (resultSet.next()) return check(resultSet.getString(1));
+		else return false;
 	}
 	
 	private boolean check(String result) {
@@ -195,14 +219,27 @@ public class DB {
 	private int getUserID(String username) throws SQLException {
 		statement = connection.createStatement();
 		resultSet = statement.executeQuery("SELECT `id` FROM `users` WHERE `username`='" + username +"'");
-		return Integer.parseInt(resultSet.getString(1));
+		if (resultSet.next()) return Integer.parseInt(resultSet.getString(1));
+		else return -1;
 	}
 	
-	private int getGroupIDOfUser(String username) throws SQLException {
+	private int getGroupID(String groupname) throws SQLException {
+		statement = connection.createStatement();
+		resultSet = statement.executeQuery("SELECT `id` FROM `groups` WHERE `groupname`='" + groupname + "'");
+		if (resultSet.next()) return Integer.parseInt(resultSet.getString(1));
+		else return -1;
+	}
+	
+	private ArrayList<Integer> getGroupIDsOfUser(String username) throws SQLException {
 		int userID = getUserID(username);
 		statement = connection.createStatement();
 		resultSet = statement.executeQuery("SELECT `group_id` FROM `usergroup` WHERE `user_id`=" + userID);
-		return Integer.parseInt(resultSet.getString(1));
+		ArrayList<Integer> list = new ArrayList<Integer>();
+		while (resultSet.next()) {
+			list.add(resultSet.getInt(1));
+		}
+		return list;
+		//return Integer.parseInt(resultSet.getString(1));
 	}
 	
 	public ArrayList<String> getAllUsernames() throws SQLException {
@@ -215,22 +252,39 @@ public class DB {
 		return usernames;
 	}
 	
-	public String[] getInformationAboutUser(String username) throws SQLException {
+	public ArrayList<String> getAllGroups() throws SQLException {
 		statement = connection.createStatement();
-		resultSet = statement.executeQuery("SELECT * FROM `users`");
-		if (resultSet.isBeforeFirst()) {
-			String[] informations = new String[3];
-			informations[0] = resultSet.getString(1);
-			informations[1] = resultSet.getString(2);
-			int groupID = getGroupIDOfUser(username);
-			statement = connection.createStatement();
-			resultSet = statement.executeQuery("SELECT `group` FROM `groups` WHERE `id`=" + groupID);
-			informations[2] = resultSet.getString(1);
+		resultSet = statement.executeQuery("SELECT `group` FROM `groups`");
+		ArrayList<String> groups = new ArrayList<String>();
+		while (resultSet.next()) groups.add(resultSet.getString(1));
+		return groups;
+	}
+	
+	public ArrayList<String> getInformationAboutUser(String username) throws SQLException {
+		statement = connection.createStatement();
+		resultSet = statement.executeQuery("SELECT * FROM `users` WHERE `username`='" + username + "'");
+		if (resultSet.next()) {
+			ArrayList<String> informations = new ArrayList<String>();
+			informations.add(resultSet.getString(1));
+			informations.add(resultSet.getString(2));
+			//String[] informations = new String[3];
+			//informations[0] = resultSet.getString(1);
+			//informations[1] = resultSet.getString(2);
+			ArrayList<Integer> groupID = getGroupIDsOfUser(username);
+			for (Integer i : groupID) {
+				statement = connection.createStatement();
+				resultSet = statement.executeQuery("SELECT `group` FROM `groups` WHERE `id`=" + i);
+				if (resultSet.next()) informations.add(resultSet.getString(1));
+			}
 			return informations;
+			//resultSet = statement.executeQuery("SELECT `group` FROM `groups` WHERE `id`=" + groupID);
+			//informations[2] = resultSet.getString(1);
+			//return informations;
 		}
 		else {
-			String[] error = new String[1];
-			error[0] = "error";
+			//String[] error = new String[1];
+			//error[0] = "error";
+			ArrayList<String> error = null;
 			return error;
 		}
 		
@@ -239,7 +293,7 @@ public class DB {
 	public String[] getFileInformations(String filename) throws SQLException {
 		statement = connection.createStatement();
 		resultSet = statement.executeQuery("SELECT * FROM `files` WHERE `filename`='" + filename + "'");
-		if (resultSet.isBeforeFirst()) {
+		if (resultSet.next()) {
 			String[] informations = new String[7];
 			informations[0] = resultSet.getString(1);
 			informations[1] = getUserByID(resultSet.getString(3));

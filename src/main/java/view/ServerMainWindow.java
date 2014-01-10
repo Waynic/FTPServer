@@ -16,6 +16,7 @@ import javax.swing.BoxLayout;
 import javax.swing.JLabel;
 import javax.swing.JButton;
 import javax.swing.JList;
+
 import java.awt.Color;
 
 import javax.swing.JTextField;
@@ -44,19 +45,23 @@ public class ServerMainWindow {
 
 	private JFrame frmFtpServer;
 	private JTextField textField;
-	JLabel lblServerStatus;
+	private JLabel lblServerStatus;
+	private JLabel lblUserid;
+	private JLabel lblUsername;
+	private JList<String> groupList;
 	
 	private Server server = null;
 	
-	private DefaultListModel<String> listModel;
-	private JList<String> list;
+	private DefaultListModel<String> userListModel;
+	private JList<String> userList;
 	
 	private DB database;
 	
-	private ArrayList<String> usernames;
+//	private ArrayList<String> usernames;
 	
 	private NewUserDialog userDialog = null;
-
+	private AddToGroupDialog groupDialog = null;
+	
 	/**
 	 * Launch the application.
 	 */
@@ -131,26 +136,26 @@ public class ServerMainWindow {
 		lblDatabase.setHorizontalAlignment(SwingConstants.CENTER);
 		//usersList.add(lblDatabase);
 		
-		list = new JList<String>();
-		listModel = new DefaultListModel<String>();
-		list.setModel(listModel);
+		userList = new JList<String>();
+		userListModel = new DefaultListModel<String>();
+		userList.setModel(userListModel);
 		//usersList.add(list);
 		
-		listScrollPane.setViewportView(list);
-		list.setVisibleRowCount(10);
+		listScrollPane.setViewportView(userList);
+		userList.setVisibleRowCount(10);
 		
 		listScrollPane.setColumnHeaderView(lblDatabase);
 		
-		list.addMouseListener(new MouseAdapter() {
+		userList.addMouseListener(new MouseAdapter() {
        	 public void mouseClicked(MouseEvent e) {
        	        if (e.getClickCount() == 2) {
-       	        	if (list.getModel().getSize()==0) {
+       	        	if (userList.getModel().getSize()==0) {
        	        		JOptionPane.showMessageDialog(frmFtpServer, "Lista jest pusta!");
        					return ;
        	        	}
        	        	else {
        	        		try {
-							showDetailInformationAboutUser(list.getSelectedValue());
+							showDetailInformationAboutUser(userList.getSelectedValue());
 						} catch (SQLException e1) {
 							throwException(e1);
 						}
@@ -191,13 +196,49 @@ public class ServerMainWindow {
 		JPanel userDetails = new JPanel();
 		userDetails.setBackground(new Color(224, 255, 255));
 		frmFtpServer.getContentPane().add(userDetails, BorderLayout.CENTER);
+		userDetails.setLayout(new BoxLayout(userDetails, BoxLayout.Y_AXIS));
+		
+		lblUserid = new JLabel("UserID:");
+		userDetails.add(lblUserid);
+		
+		lblUsername = new JLabel("Username:");
+		userDetails.add(lblUsername);
+		
+		groupList = new JList<String>();
+		groupList.setVisibleRowCount(10);
+		
+		JScrollPane groupListScrollPane = new JScrollPane(groupList);
+
+		userDetails.add(groupListScrollPane);
+		
+		JLabel lblGroups = new JLabel("Groups:");
+	//	userDetails.add(lblGroups);
+		
+		
+	//	groupListScrollPane.add(groupList);
+		groupListScrollPane.setColumnHeaderView(lblGroups);
+		groupListScrollPane.setViewportView(groupList);
+		
+		JButton btnAddGroups = new JButton("Add group(s)");
+		btnAddGroups.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent arg0) {
+				try {
+					showAddGroupDialog(userList.getSelectedValue());
+				} catch (SQLException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+			}
+		});
+		userDetails.add(btnAddGroups);
+	//	userDetails.add(groupList);
 		
 		JPanel misc = new JPanel();
 		frmFtpServer.getContentPane().add(misc, BorderLayout.SOUTH);
 		
 		try {
 			database = new DB();
-			usernames = database.getAllUsernames();
+	//		usernames = database.getAllUsernames();
 			initializeUsersList();
 		} catch (InstantiationException | IllegalAccessException
 				| ClassNotFoundException | SQLException e2) {
@@ -224,7 +265,6 @@ public class ServerMainWindow {
 		} catch (NumberFormatException e) {
 			throwException(e);
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
 			throwException(e);
 		}
 	}
@@ -250,39 +290,59 @@ public class ServerMainWindow {
 			Random rndGen = new Random();
 			int salt = rndGen.nextInt();
 			database.addUser(username, pass, salt);
-			usernames.add(username);
-			refreshUsersList();
+			//usernames.add(username);
+			userListModel.addElement(username);
+		//	refreshUsersList();
 		}
 	}
 	
+	private void showAddGroupDialog(String username) throws SQLException {
+		if (groupDialog == null) {
+			groupDialog = new AddToGroupDialog(database, frmFtpServer, username);
+		}
+		groupDialog.pack();
+		groupDialog.setSize(groupDialog.getPreferredSize().width+100, groupDialog.getPreferredSize().height);
+		groupDialog.setLocationRelativeTo(null);
+		groupDialog.generateGroupList(username);
+		groupDialog.setVisible(true);
+		if (!groupDialog.clickedCancel()) {
+			List<String> groups = groupDialog.getSelectedGroups();
+			for (String g : groups) {
+				database.addUserToGroup(username, g);
+			}
+		}
+		showDetailInformationAboutUser(username);
+	}
+	
 	private void removeUser() throws SQLException {
-		List<String> listOfUsersToDelete = list.getSelectedValuesList();
-		int[] indexes = list.getSelectedIndices();
+		List<String> listOfUsersToDelete = userList.getSelectedValuesList();
+		int[] indexes = userList.getSelectedIndices();
 		int i = 0;
 		for (String username : listOfUsersToDelete) {
 			database.deleteUser(username);
-			list.remove(indexes[i]);
+			//list.remove(indexes[i]);
+			userListModel.remove(indexes[i]);
 			i++;
 		}
 	}
 	
 	private void showDetailInformationAboutUser(String user) throws SQLException {
-		String[] info = database.getInformationAboutUser(user);
-		if (!info[0].equals("error")) {
-			//do something
+		ArrayList<String> info = database.getInformationAboutUser(user);
+		if (info != null) {
+			//TODO try to set fixed size for list (not important but...)
+			lblUserid.setText("UserID: " + info.get(0));
+			lblUsername.setText("Username: " + info.get(1));
+			DefaultListModel<String> groupListModel = new DefaultListModel<String>();
+			for (int i=2;i<info.size();i++) groupListModel.addElement(info.get(i));
+			groupList.setModel(groupListModel);
+		//	groupList.setSize(new Dimension(300,300));
 		}
 	}
 	
-	private void initializeUsersList() {
-		if (!usernames.isEmpty()) {
-			for (String u : usernames) {
-				listModel.addElement(u);
-			}
+	private void initializeUsersList() throws SQLException {
+		for (String u : database.getAllUsernames()) {
+			userListModel.addElement(u);
 		}
-	}
-	
-	private void refreshUsersList() {
-		listModel.addElement(usernames.get(usernames.size()-1));
 	}
 
 	private void throwException(Exception e) {

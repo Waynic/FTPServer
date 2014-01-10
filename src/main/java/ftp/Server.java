@@ -22,7 +22,7 @@ public class Server implements Runnable {
 	protected ServerSocket serverSocket = null;
 	protected boolean isStopped = false;
 	protected Thread runningThread= null;
-	protected ExecutorService threadPool = Executors.newFixedThreadPool(2);
+	protected ExecutorService threadPool = Executors.newFixedThreadPool(5);
 	
 	private DB database = null;
 	

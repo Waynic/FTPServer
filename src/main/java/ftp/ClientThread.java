@@ -15,16 +15,6 @@ import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.UnknownHostException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.attribute.FileTime;
-import java.nio.file.attribute.GroupPrincipal;
-import java.nio.file.attribute.PosixFileAttributeView;
-import java.nio.file.attribute.PosixFileAttributes;
-import java.nio.file.attribute.PosixFilePermissions;
-import java.nio.file.attribute.UserPrincipal;
-import java.security.acl.Owner;
 import java.sql.SQLException;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
@@ -73,7 +63,7 @@ public class ClientThread implements Runnable {
 		try {
 			disconnectTimer = new Timer();
 			disconnectTask = createNewTimerTask();
-			disconnectTimer.schedule(disconnectTask, 2*60*1000);
+			disconnectTimer.schedule(disconnectTask, 60*1000);
 			BufferedReader messageFromClient  =  new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
 			messageToClient = new PrintWriter(clientSocket.getOutputStream(), true);
 			String inputLine;
@@ -85,13 +75,13 @@ public class ClientThread implements Runnable {
 				doRequestedCommand(inputLine);
 			}
 			cancelDisconectDeamon();
+			clientSocket.close();
 		} catch (IOException e) {
 			if (clientSocket.isClosed()) {
 				cancelDisconectDeamon();
 			}
 			else e.printStackTrace();
 		} catch (SQLException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 	}
@@ -99,7 +89,7 @@ public class ClientThread implements Runnable {
 	private void sendWelcomeMessage() {		
 		messageToClient.println("220---------- Welcome to Fortun server [privsep] ----------");
 		messageToClient.println("220-This is a private system - No anonymous login");
-		messageToClient.println("220 You will be disconnected after 3 minutes of inactivity.");
+		messageToClient.println("220 You will be disconnected after 1 minute of inactivity.");
 	}
 	
 	private void doRequestedCommand(String input) throws IOException, SQLException {
@@ -230,11 +220,21 @@ public class ClientThread implements Runnable {
 
 
 	/**
+	 * @throws IOException 
 	 * 
 	 */
-	private void stopOperation() {
-		// TODO Auto-generated method stub
-		
+	private void stopOperation() throws IOException {
+		if (dataSocket == null || dataSocket.isClosed()) {
+			messageToClient.println("226 Abort accepted and completed");
+		}
+		else {
+			//TODO
+			//close buffers (have to make them into fields)
+			//ask how we should different files
+			dataSocket.close();
+			messageToClient.println("426 service request terminated abnormally");
+			messageToClient.println("226 Abort accepted and completed");
+		}
 	}
 
 
@@ -406,7 +406,7 @@ public class ClientThread implements Runnable {
 			@Override
 			public void run() {
 					disconnectClient = true;
-					messageToClient.print(-1);
+				//	messageToClient.print(-1);
 					//messageToClient.println("-1");
 			}
 		};

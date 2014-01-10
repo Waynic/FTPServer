@@ -4,10 +4,6 @@
 package view;
 
 import java.awt.Dialog;
-import java.awt.Frame;
-import java.awt.GraphicsConfiguration;
-import java.awt.Window;
-
 import javax.swing.JDialog;
 import javax.swing.BoxLayout;
 import javax.swing.JFrame;
@@ -15,8 +11,6 @@ import javax.swing.JPanel;
 import javax.swing.JLabel;
 import javax.swing.JTextField;
 import javax.swing.JPasswordField;
-import javax.swing.JInternalFrame;
-
 import java.awt.BorderLayout;
 
 import javax.swing.JButton;
@@ -29,6 +23,11 @@ import java.awt.event.ActionEvent;
  *
  */
 public class NewUserDialog extends JDialog {
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = -5640810496596198772L;
+	
 	private JTextField usernameTextField;
 	private JPasswordField passwordField;
 
@@ -87,7 +86,6 @@ public class NewUserDialog extends JDialog {
 			}
 		});
 		buttonsPanel.add(btnCancel);
-		// TODO Auto-generated constructor stub
 	}
 	
 	@Override
