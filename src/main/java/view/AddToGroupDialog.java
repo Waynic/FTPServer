@@ -4,9 +4,9 @@
 package view;
 
 import java.awt.Dialog;
+
 import javax.swing.JDialog;
 import javax.swing.BoxLayout;
-
 import javax.swing.JPanel;
 import javax.swing.JSplitPane;
 import javax.swing.JButton;
@@ -35,16 +35,33 @@ import java.util.List;
 public class AddToGroupDialog extends JDialog {
 
 	/**
-	 * 
+	 * needed to eventual serialization
 	 */
 	private static final long serialVersionUID = 3931022955953008137L;
 	
-	private DB database = null;
-	private JList<String> list = null;
-	private DefaultListModel<String> groupListModel;
-	private boolean clickedCancel = false;
 	/**
+	 * object of {@link database.DB} to use some mehods from it
+	 */
+	private DB database = null;
+	/**
+	 * list of groups in database
+	 */
+	private JList<String> list = null;
+	/**
+	 * List model for group list
+	 */
+	private DefaultListModel<String> groupListModel;
+	/**
+	 * true if user clicked cancel; false otherwise
+	 */
+	private boolean clickedCancel = false;
+
+	/**
+	 * Constructor
 	 * 
+	 * @param database to connect with database
+	 * @param parentFrame frame of invoker of this JDialog
+	 * @param username name of user which will be added to groups
 	 */
 	public AddToGroupDialog(DB database, JFrame parentFrame, String username) {
 		super ( parentFrame, "Add user to group(s)", false );
@@ -100,7 +117,12 @@ public class AddToGroupDialog extends JDialog {
 		super.setVisible(b);
 	}
 	
-	public void generateGroupList(String username) throws SQLException {
+	/**
+	 * method that generates list of groups from database
+	 * 
+	 * @throws SQLException
+	 */
+	public void generateGroupList() throws SQLException {
 		ArrayList<String> groups = database.getAllGroups();
 		groupListModel = new DefaultListModel<String>();
 		for (String g : groups) {
@@ -108,10 +130,18 @@ public class AddToGroupDialog extends JDialog {
 		}
 	}
 	
+	/**
+	 * returns state of {@link view.AddToGroupDialog#clickedCancel}
+	 * 
+	 * @return true if user clicked cancel button; false otherwise
+	 */
 	public boolean clickedCancel() {
 		return clickedCancel;
 	}
 	
+	/**
+	 * @return list of selected groups from list
+	 */
 	public List<String> getSelectedGroups() {
 		return list.getSelectedValuesList();
 	}

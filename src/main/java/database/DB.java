@@ -12,23 +12,64 @@ import java.sql.Statement;
 import java.util.ArrayList;
 
 /**
+ * Class that connects and sends queries to the database
+ * 
  * @author Jakub Fortunka
  *
  */
 public class DB {
 
+	/**
+	 * Connection with database
+	 */
 	private Connection connection = null;
+	/**
+	 * statement to send
+	 */
 	private Statement statement = null;
+	/**
+	 * result set
+	 */
 	private ResultSet resultSet = null;
 	
+	/**
+	 * Constructor. Connects with default database
+	 * 
+	 * @throws InstantiationException
+	 * @throws IllegalAccessException
+	 * @throws ClassNotFoundException
+	 * @throws SQLException
+	 */
 	public DB() throws InstantiationException, IllegalAccessException, ClassNotFoundException, SQLException {
 		connect("fortunka", "XK4uMsjV", "jdbc:mysql://mysql.agh.edu.pl/fortunka");
 	}
 	
+	/**
+	 * Constructor. Connects with custom database
+	 * 
+	 * @param username username for database
+	 * @param password password for database
+	 * @param address address to database
+	 * @throws InstantiationException
+	 * @throws IllegalAccessException
+	 * @throws ClassNotFoundException
+	 * @throws SQLException
+	 */
 	public DB(String username, String password, String address) throws InstantiationException, IllegalAccessException, ClassNotFoundException, SQLException {
 		connect(username, password, address);
 	}
 	
+	/**
+	 * Method that connects with database with credentials passed by argumets
+	 * 
+	 * @param username username
+	 * @param password password
+	 * @param address address of database
+	 * @throws InstantiationException
+	 * @throws IllegalAccessException
+	 * @throws ClassNotFoundException
+	 * @throws SQLException
+	 */
 	private void connect(String username, String password, String address) throws InstantiationException, IllegalAccessException, ClassNotFoundException, SQLException {
 		Class.forName("com.mysql.jdbc.Driver").newInstance();
 		connection = DriverManager.getConnection(address, username, password);
@@ -39,6 +80,11 @@ public class DB {
 		}
 	}
 	
+	/**
+	 * Method that creates tables in database if they don't exists
+	 * 
+	 * @throws SQLException
+	 */
 	private void createTables() throws SQLException {
 		statement = connection.createStatement();
 		statement.executeUpdate("CREATE TABLE IF NOT EXISTS `users` ("
@@ -83,6 +129,14 @@ public class DB {
 				+") ENGINE=MyISAM DEFAULT CHARSET=latin2;");
 	}
 	
+	/**
+	 * Method adds user to database
+	 * 
+	 * @param username username
+	 * @param password password
+	 * @param salt used to make it harder to decrypt user password
+	 * @throws SQLException
+	 */
 	public void addUser(String username, String password, int salt) throws SQLException {
 		statement = connection.createStatement();
 		statement.executeUpdate("INSERT INTO `users`(`username`, `password`, `salt`) "
@@ -91,11 +145,24 @@ public class DB {
 		addUserToGroup(username, username);
 	}
 	
+	/**
+	 * Adds group to database
+	 *  
+	 * @param groupname name of group to add
+	 * @throws SQLException
+	 */
 	public void addGroup(String groupname) throws SQLException {
 		statement = connection.createStatement();
 		statement.executeUpdate("INSERT INTO `groups`(`group`) VALUES ('" + groupname + "')");
 	}
 	
+	/**
+	 * Adds file to database (with default rights)
+	 * 
+	 * @param filename name of file (path)
+	 * @param owner name of owner of the file (must be in the database)
+	 * @throws SQLException
+	 */
 	public void addFile(String filename, String owner) throws SQLException {
 		int userID = getUserID(owner);
 		int groupID = getGroupIDsOfUser(owner).get(1);
@@ -104,17 +171,36 @@ public class DB {
 				+ " VALUES ('" + filename + "','" + userID + "','" + groupID + "',TRUE,TRUE,TRUE,FALSE)");
 	}
 	
+	/**
+	 * Adds user to group
+	 * 
+	 * @param user username
+	 * @param group groupname
+	 * @throws SQLException
+	 */
 	public void addUserToGroup(String user, String group) throws SQLException {
 		statement = connection.createStatement();
 		statement.executeUpdate("INSERT INTO `usergroup`(`user_id`,`group_id`) VALUES "
 				+ "((SELECT `id` FROM `users` WHERE `username`='" + user + "') , (SELECT `id` FROM `groups` WHERE `group`='" + group + "'))");
 	}
 	
+	/**
+	 * Deletes file from database
+	 *  
+	 * @param filename name of file to delete
+	 * @throws SQLException
+	 */
 	public void deleteFile(String filename) throws SQLException {
 		statement = connection.createStatement();
 		statement.executeUpdate("DELETE FROM `files` WHERE `filename`='" + filename + "'");
 	}
 	
+	/**
+	 * Deletes user from database
+	 * 
+	 * @param username name of user to delete
+	 * @throws SQLException
+	 */
 	public void deleteUser(String username) throws SQLException {
 		statement = connection.createStatement();
 		statement.executeUpdate("DELETE FROM `users` WHERE `username`='" + username +"'");
@@ -122,11 +208,24 @@ public class DB {
 		deleteConnectionBetweenUserAndGroup(username, username);
 	}
 	
+	/**
+	 * Deletes group from database
+	 * 
+	 * @param groupname name of group to delete
+	 * @throws SQLException
+	 */
 	public void deleteGroup(String groupname) throws SQLException {
 		statement = connection.createStatement();
 		statement.executeUpdate("DELETE FROM `groups` WHERE `group`='" + groupname + "'");
 	}
 	
+	/**
+	 * Delets user from group
+	 * 
+	 * @param username name of user to disconnect with group
+	 * @param groupname name of group to disconnect with user
+	 * @throws SQLException
+	 */
 	public void deleteConnectionBetweenUserAndGroup(String username, String groupname) throws SQLException {
 		int userID = getUserID(username);
 		int groupID = getGroupID(groupname);
@@ -134,6 +233,14 @@ public class DB {
 		statement.executeUpdate("DELETE FROM `usergroup` WHERE `user_id`=" + userID + " AND `group_id`=" + groupID);
 	}
 	
+	/**
+	 * Changes rigths of file
+	 * 
+	 * @param filename name of file (path)
+	 * @param ownerRights represents owner rights (numeric like 7 or 5)
+	 * @param groupRights represents group rights (numeric like 7 or 5)
+	 * @throws SQLException
+	 */
 	public void changeFileRights(String filename, String ownerRights, String groupRights) throws SQLException {
 		int owner = Integer.parseInt(ownerRights);
 		int group = Integer.parseInt(groupRights);
@@ -144,6 +251,13 @@ public class DB {
 				+ rights[3] + "') WHERE `filename`='" + filename + "'");
 	}
 	
+	/**
+	 * changes rights to 'TRUE', 'FALSE' and distinguish read and write permission
+	 * 
+	 * @param ownerRights rights of owner of file
+	 * @param groupRights rights of group of file
+	 * @return
+	 */
 	private String[] adjustRights (int ownerRights, int groupRights) {
 		String[] rights = new String[4];
 		String[] owner = transformRights(ownerRights);
@@ -155,6 +269,12 @@ public class DB {
 		return rights;
 	}
 	
+	/**
+	 * Transform rights from int to 'TRUE', 'FALSE'
+	 * 
+	 * @param rights owner or group rights
+	 * @return
+	 */
 	private String[] transformRights(int rights) {
 		String[] newRights = new String[2];
 		if (rights==0) {
@@ -176,6 +296,13 @@ public class DB {
 		return newRights;
 	}
 	
+	/**
+	 * Checks if user is in database
+	 * 
+	 * @param username name of user to check
+	 * @return true if user exists in database; false otherwise
+	 * @throws SQLException
+	 */
 	public boolean checkIfUserExists(String username) throws SQLException {
 		statement = connection.createStatement();
 		resultSet = statement.executeQuery("SELECT `username`='" + username + "' FROM `users` WHERE `username`='" + username +"'");
@@ -183,6 +310,14 @@ public class DB {
 		else return false;
 	}
 	
+	/**
+	 * Checks if user entered password properly
+	 * 
+	 * @param user username
+	 * @param password entered password
+	 * @return true if password is ok; false otherwise
+	 * @throws SQLException
+	 */
 	public boolean checkUserPassword(String user, String password) throws SQLException {
 		statement = connection.createStatement();
 		resultSet = statement.executeQuery("SELECT `password`=PASSWORD(CONCAT(PASSWORD('" + password + "'),salt)) FROM "
@@ -191,6 +326,14 @@ public class DB {
 		else return false;
 	}
 	
+	/**
+	 * checks if user can read file
+	 * 
+	 * @param user name of user which wants to read a file
+	 * @param filename file that will (or not) be read
+	 * @return true if user can read file; false otherwise
+	 * @throws SQLException
+	 */
 	public boolean checkIfUserHavePermissionToRead(String user, String filename) throws SQLException {
 		statement = connection.createStatement();
 		int userID = getUserID(user);
@@ -201,6 +344,14 @@ public class DB {
 		else return false;
 	}
 	
+	/**
+	 * Checks if user can write to file
+	 * 
+	 * @param user name of user which wants to write to a file
+	 * @param filename file that will (or not) be written to
+	 * @return true if user can write to specified file; false otherwise
+	 * @throws SQLException
+	 */
 	public boolean checkIfUserHavePermissionToWrite(String user, String filename) throws SQLException {
 		statement = connection.createStatement();
 		int userID = getUserID(user);
@@ -211,11 +362,24 @@ public class DB {
 		else return false;
 	}
 	
+	/**
+	 * checks state (used in {@link database.DB#checkIfUserHavePermissionToRead(String, String) and database.DB#checkIfUserHavePermissionToWrite(String, String)}
+	 * 
+	 * @param result true if database returned 1; false otherwise
+	 * @return
+	 */
 	private boolean check(String result) {
 		if (Integer.parseInt(result) == 1) return true;
 		else return false;
 	}
 	
+	/**
+	 * Gets user ID
+	 * 
+	 * @param username name of user which id we want to have
+	 * @return id of user; when something went wrong returns -1
+	 * @throws SQLException
+	 */
 	private int getUserID(String username) throws SQLException {
 		statement = connection.createStatement();
 		resultSet = statement.executeQuery("SELECT `id` FROM `users` WHERE `username`='" + username +"'");
@@ -223,6 +387,13 @@ public class DB {
 		else return -1;
 	}
 	
+	/**
+	 * Gets group ID
+	 * 
+	 * @param groupname name of group which ID we want to have
+	 * @return group ID; when something went wrong returns -1
+	 * @throws SQLException
+	 */
 	private int getGroupID(String groupname) throws SQLException {
 		statement = connection.createStatement();
 		resultSet = statement.executeQuery("SELECT `id` FROM `groups` WHERE `groupname`='" + groupname + "'");
@@ -230,6 +401,13 @@ public class DB {
 		else return -1;
 	}
 	
+	/**
+	 * Gets all groups IDs in which some user is
+	 * 
+	 * @param username name of user to get all of his group ids
+	 * @return {@link ArrayList} of {@link Integer} in which are stored all ids of groups
+	 * @throws SQLException
+	 */
 	private ArrayList<Integer> getGroupIDsOfUser(String username) throws SQLException {
 		int userID = getUserID(username);
 		statement = connection.createStatement();
@@ -242,6 +420,12 @@ public class DB {
 		//return Integer.parseInt(resultSet.getString(1));
 	}
 	
+	/**
+	 * Gets all users from database
+	 * 
+	 * @return {@link ArrayList} of {@link String} in which are all usernames
+	 * @throws SQLException
+	 */
 	public ArrayList<String> getAllUsernames() throws SQLException {
 		statement = connection.createStatement();
 		resultSet = statement.executeQuery("SELECT `username` FROM `users`");
@@ -252,6 +436,12 @@ public class DB {
 		return usernames;
 	}
 	
+	/**
+	 * Gets all groups from database
+	 * 
+	 * @return all groups that exists in database
+	 * @throws SQLException
+	 */
 	public ArrayList<String> getAllGroups() throws SQLException {
 		statement = connection.createStatement();
 		resultSet = statement.executeQuery("SELECT `group` FROM `groups`");
@@ -260,6 +450,13 @@ public class DB {
 		return groups;
 	}
 	
+	/**
+	 * Gets informations about user: his ID and all groups that he belongs in.
+	 * 
+	 * @param username name of user about which we want to get informations
+	 * @return informations about user
+	 * @throws SQLException
+	 */
 	public ArrayList<String> getInformationAboutUser(String username) throws SQLException {
 		statement = connection.createStatement();
 		resultSet = statement.executeQuery("SELECT * FROM `users` WHERE `username`='" + username + "'");
@@ -290,36 +487,65 @@ public class DB {
 		
 	}
 	
+	/**
+	 * Gets informations about files (for listing): id, owner, group, user_read, user_write, group_read, group_write
+	 * 
+	 * @param filename name of file to get informations about
+	 * @return informations about file (what informations? look up!)
+	 * @throws SQLException
+	 */
 	public String[] getFileInformations(String filename) throws SQLException {
-		statement = connection.createStatement();
-		resultSet = statement.executeQuery("SELECT * FROM `files` WHERE `filename`='" + filename + "'");
-		if (resultSet.next()) {
-			String[] informations = new String[7];
-			informations[0] = resultSet.getString(1);
-			informations[1] = getUserByID(resultSet.getString(3));
-			informations[2] = getGroupByID(resultSet.getString(4));
-			for (int i=0;i<4;i++) {
-				informations[3+i] = resultSet.getString(5+i);
-			}
-			return informations;
-		}
-		else {
-			String[] error = new String[1];
-			error[0] = "error";
-			return error;
-		}
+		String[] informations = new String[7];
+		informations[0] = getFileInformation(filename, "id");
+		informations[1] = getUserByID(getFileInformation(filename, "owner_id"));
+		informations[2] = getGroupByID(getFileInformation(filename, "group_id"));
+		informations[3] = getFileInformation(filename, "user_read");
+		informations[4] = getFileInformation(filename, "user_write");
+		informations[5] = getFileInformation(filename, "group_read");
+		informations[6] = getFileInformation(filename, "group_write");
+		return informations;
 	}
 	
+	/**
+	 * gets username by his id
+	 * 
+	 * @param userID id of user which name we want to find
+	 * @return name of user who has passed id
+	 * @throws SQLException
+	 */
 	public String getUserByID(String userID) throws SQLException {
 		statement = connection.createStatement();
 		resultSet = statement.executeQuery("SELECT `username` FROM `users` WHERE `id`=" + userID);
-		return resultSet.getString(1);
+		if (resultSet.next()) return resultSet.getString(1);
+		else return null;
 	}
 	
+	/**
+	 * Gets group name by hers id
+	 * 
+	 * @param groupID id of group
+	 * @return name of group which has passed id
+	 * @throws SQLException
+	 */
 	public String getGroupByID(String groupID) throws SQLException {
 		statement = connection.createStatement();
 		resultSet = statement.executeQuery("SELECT `group` FROM `groups` WHERE `id`=" + groupID);
-		return resultSet.getString(1);
+		if (resultSet.next()) return resultSet.getString(1);
+		else return null;
 	}
-
+	
+	/**
+	 * gets informations about file - what informations will it be, is passed by columnName
+	 * 
+	 * @param filename name of file (path)
+	 * @param columnName name of column from which we want to get information
+	 * @return informations about file
+	 * @throws SQLException
+	 */
+	private String getFileInformation(String filename, String columnName) throws SQLException {
+		statement = connection.createStatement();
+		resultSet = statement.executeQuery("SELECT `" + columnName + "` FROM `files` WHERE `filename`='" + filename + "'");
+		if (resultSet.next()) return resultSet.getString(1);
+		else return null;
+	}
 }

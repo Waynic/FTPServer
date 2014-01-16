@@ -19,20 +19,30 @@ import java.awt.event.ActionListener;
 import java.awt.event.ActionEvent;
 
 /**
+ * Class that manages interaction with user to create new user in database
+ * 
  * @author Jakub Fortunka
  *
  */
 public class NewUserDialog extends JDialog {
 	/**
-	 * 
+	 * for eventual serialization
 	 */
 	private static final long serialVersionUID = -5640810496596198772L;
 	
+	/**
+	 * text field for username
+	 */
 	private JTextField usernameTextField;
+	/**
+	 * password field for password
+	 */
 	private JPasswordField passwordField;
 
 	/**
+	 * Constructor
 	 * 
+	 * @param parentFrame frame of the invoker
 	 */
 	public NewUserDialog(JFrame parentFrame) {
 		super ( parentFrame, "New User", false );
@@ -97,10 +107,16 @@ public class NewUserDialog extends JDialog {
 		super.setVisible(b);
 	}
 	
+	/**
+	 * @return entered username (when user clicked cancel, username is set to -1)
+	 */
 	public String getUsername() {
 		return usernameTextField.getText();
 	}
 	
+	/**
+	 * @return entered password
+	 */
 	public String getPassword() {
 		return String.copyValueOf(passwordField.getPassword());
 	}

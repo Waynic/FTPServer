@@ -38,28 +38,67 @@ import javax.swing.JScrollPane;
 import javax.swing.SwingConstants;
 
 /**
+ * Main class of program. Initialize graphical interface and all of the fancy stuff.
+ * 
  * @author Jakub Fortunka
  *
  */
 public class ServerMainWindow {
 
+	/**
+	 * main frame
+	 */
 	private JFrame frmFtpServer;
+	/**
+	 * text field in which is entered port number of server
+	 */
 	private JTextField textField;
+	/**
+	 * label for showing a server status
+	 */
 	private JLabel lblServerStatus;
+	/**
+	 * label showing user id
+	 */
 	private JLabel lblUserid;
+	/**
+	 * label showing username
+	 */
 	private JLabel lblUsername;
+	/**
+	 * list of groups
+	 */
 	private JList<String> groupList;
 	
+	/**
+	 * main class for "server action"
+	 */
 	private Server server = null;
 	
+	/**
+	 * list model for list of groups
+	 */
 	private DefaultListModel<String> userListModel;
+	/**
+	 * list of users in database
+	 */
 	private JList<String> userList;
 	
+	/**
+	 * main class for connecting and managing database
+	 * @see database.DB
+	 */
 	private DB database;
 	
 //	private ArrayList<String> usernames;
 	
+	/**
+	 * @see view.NewUserDialog
+	 */
 	private NewUserDialog userDialog = null;
+	/**
+	 * @see view.AddToGroupDialog
+	 */
 	private AddToGroupDialog groupDialog = null;
 	
 	/**
@@ -102,7 +141,7 @@ public class ServerMainWindow {
 		menu.add(lblPort);
 		
 		textField = new JTextField();
-		textField.setText("9000");
+		textField.setText("3021");
 		menu.add(textField);
 		textField.setColumns(10);
 		
@@ -252,6 +291,9 @@ public class ServerMainWindow {
 		
 	}
 	
+	/**
+	 * starts the server
+	 */
 	private void startServer() {
 		try {
 			if (database == null) {
@@ -269,6 +311,9 @@ public class ServerMainWindow {
 		}
 	}
 	
+	/**
+	 * stops the server
+	 */
 	private void stopServer() {
 		if (server != null) {
 			server.stop();
@@ -276,6 +321,12 @@ public class ServerMainWindow {
 		}
 	}
 	
+	/**
+	 * method that manage adding user to database.
+	 * Shows {@link view.NewUserDialog}, gets informations from it and uses {@link database.DB#addUser(String, String, int)} to add user to database
+	 * 
+	 * @throws SQLException
+	 */
 	private void addUser() throws SQLException {
 		if (userDialog == null) {
 			userDialog = new NewUserDialog(frmFtpServer);
@@ -296,6 +347,12 @@ public class ServerMainWindow {
 		}
 	}
 	
+	/**
+	 * Method that shows (creates if necessary) {@link view.AddToGroupDialog} and manages adding user to choosen groups. 
+	 * 
+	 * @param username name of user that will be added to groups
+	 * @throws SQLException
+	 */
 	private void showAddGroupDialog(String username) throws SQLException {
 		if (groupDialog == null) {
 			groupDialog = new AddToGroupDialog(database, frmFtpServer, username);
@@ -303,7 +360,7 @@ public class ServerMainWindow {
 		groupDialog.pack();
 		groupDialog.setSize(groupDialog.getPreferredSize().width+100, groupDialog.getPreferredSize().height);
 		groupDialog.setLocationRelativeTo(null);
-		groupDialog.generateGroupList(username);
+		groupDialog.generateGroupList();
 		groupDialog.setVisible(true);
 		if (!groupDialog.clickedCancel()) {
 			List<String> groups = groupDialog.getSelectedGroups();
@@ -314,6 +371,11 @@ public class ServerMainWindow {
 		showDetailInformationAboutUser(username);
 	}
 	
+	/**
+	 * removes user from database using {@link database.DB#deleteUser(String)}
+	 * 
+	 * @throws SQLException
+	 */
 	private void removeUser() throws SQLException {
 		List<String> listOfUsersToDelete = userList.getSelectedValuesList();
 		int[] indexes = userList.getSelectedIndices();
@@ -326,6 +388,12 @@ public class ServerMainWindow {
 		}
 	}
 	
+	/**
+	 * Shows information about user in another JPanel using {@link database.DB#getInformationAboutUser(String)}
+	 * 
+	 * @param user name of user about which informations we want to have
+	 * @throws SQLException
+	 */
 	private void showDetailInformationAboutUser(String user) throws SQLException {
 		ArrayList<String> info = database.getInformationAboutUser(user);
 		if (info != null) {
@@ -339,12 +407,22 @@ public class ServerMainWindow {
 		}
 	}
 	
+	/**
+	 * method that initialize list of users from database
+	 * 
+	 * @throws SQLException
+	 */
 	private void initializeUsersList() throws SQLException {
 		for (String u : database.getAllUsernames()) {
 			userListModel.addElement(u);
 		}
 	}
 
+	/**
+	 * shows exception message in JOptionPane
+	 * 
+	 * @param e exception to throw
+	 */
 	private void throwException(Exception e) {
 		JOptionPane.showMessageDialog(frmFtpServer,
 				e.getMessage(),

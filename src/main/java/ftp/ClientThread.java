@@ -25,30 +25,75 @@ import java.util.TimerTask;
 import database.DB;
 
 /**
+ * Class which objects communicates with clients, do commands etc.
+ * 
  * @author Jakub Fortunka
  *
  */
 public class ClientThread implements Runnable {
 
+	/**
+	 * Socket for communicating with client
+	 */
 	private Socket clientSocket = null;
+	/**
+	 * ServerSocket for accepting PASV command
+	 */
 	private ServerSocket dataSocketServer = null;
+	/**
+	 * Socket for transfering files
+	 */
 	private Socket dataSocket = null;
 	
+	/**
+	 * parent path of server files (everything before "serverFiles" directory)
+	 */
 	private final String parentPath;
+	/**
+	 * working full path (for writing files etc.) 
+	 */
 	private String systemPath = null;
+	/**
+	 * wroking virtual path (for showing user his position etc.)
+	 */
 	private String virtualPath = null;
 	
+	/**
+	 * when true, then server will disconnect client
+	 */
 	private boolean disconnectClient = false;
 	
+	/**
+	 * timer for server disconnection
+	 */
 	private Timer disconnectTimer = null;
+	/**
+	 * task for disconnecting
+	 */
 	private TimerTask disconnectTask = null;
 	
+	/**
+	 * manages database
+	 */
 	private DB database = null;
 	
+	/**
+	 * sends messages to client side
+	 */
 	private PrintWriter messageToClient;
 	
-	String user = null;
+	/**
+	 * name of user which is logged to the server by this thread
+	 */
+	private String user = null;
 
+	/**
+	 * Constructor
+	 * 
+	 * @param client socket connected to the client (for communication)
+	 * @param parentDirectory parent directory on local machine
+	 * @param database manages connection and queries with database
+	 */
 	public ClientThread(Socket client, String parentDirectory, DB database) {
 		clientSocket = client;
 		virtualPath = "/";
@@ -58,6 +103,11 @@ public class ClientThread implements Runnable {
 	}
 
 
+	/** 
+	 * main "loop" - reads commands from clients and executes them
+	 * 
+	 * @see java.lang.Runnable#run()
+	 */
 	@Override
 	public void run() {
 		try {
@@ -86,12 +136,22 @@ public class ClientThread implements Runnable {
 		}
 	}
 	
+	/**
+	 * sends welcome message
+	 */
 	private void sendWelcomeMessage() {		
 		messageToClient.println("220---------- Welcome to Fortun server [privsep] ----------");
 		messageToClient.println("220-This is a private system - No anonymous login");
 		messageToClient.println("220 You will be disconnected after 1 minute of inactivity.");
 	}
 	
+	/**
+	 * Many ifs - manages to do what it have to when client sends command
+	 * 
+	 * @param input line from client
+	 * @throws IOException
+	 * @throws SQLException
+	 */
 	private void doRequestedCommand(String input) throws IOException, SQLException {
 		resetDisconnectionTimer();
 		if (input.startsWith("USER")) checkUser(input);
@@ -115,7 +175,9 @@ public class ClientThread implements Runnable {
 
 
 	/**
-	 * @param input
+	 * check if username passed by USER exists in database
+	 * 
+	 * @param input line from client
 	 * @throws SQLException 
 	 */
 	private void checkUser(String input) throws SQLException {
@@ -129,7 +191,9 @@ public class ClientThread implements Runnable {
 
 
 	/**
-	 * @param input
+	 * Checks if user entered right password
+	 * 
+	 * @param input line from client
 	 * @throws SQLException 
 	 */
 	private void checkPassword(String input) throws SQLException {
@@ -140,6 +204,8 @@ public class ClientThread implements Runnable {
 
 
 	/**
+	 * closes connection with client
+	 * 
 	 * @throws IOException 
 	 * 
 	 */
@@ -151,15 +217,17 @@ public class ClientThread implements Runnable {
 
 
 	/**
-	 * 
+	 * refresh the timer (react to NOOP command)
 	 */
 	private void refreshConnection() {
 		messageToClient.println("200 Zzz...");
-		//resetDisconnectionTimer();
+		resetDisconnectionTimer();
 	}
 
 
 	/**
+	 * opens passive mode 
+	 * 
 	 * @throws IOException 
 	 * @throws UnknownHostException 
 	 * 
@@ -179,7 +247,9 @@ public class ClientThread implements Runnable {
 
 
 	/**
-	 * @param input
+	 * reaction for RETR command
+	 * 
+	 * @param input line from client
 	 * @throws IOException 
 	 * @throws UnknownHostException 
 	 */
@@ -199,14 +269,18 @@ public class ClientThread implements Runnable {
 
 
 	/**
-	 * @param input
-	 * @param b
+	 * manages of saving file on server
+	 * 
+	 * @param input line from client
+	 * @param b if true command is STOR; command APPE otherwise
 	 * @throws IOException 
+	 * @throws SQLException 
 	 */
-	private void getFile(String input, boolean b) throws IOException {
+	private void getFile(String input, boolean b) throws IOException, SQLException {
+		// TODO append and filename
 		String filename = getContentFromCommand(input);
 		File f = new File(systemPath + File.separator + filename);
-		//database.addFile(filename, user);
+		database.addFile(virtualPath + "/" + filename, user);
 		BufferedInputStream in = new BufferedInputStream(dataSocket.getInputStream());
 		BufferedOutputStream out = new BufferedOutputStream(new FileOutputStream(f));
 		messageToClient.println("150 FILE: " + filename);
@@ -220,6 +294,8 @@ public class ClientThread implements Runnable {
 
 
 	/**
+	 * stops current operation on server (command ABOR)
+	 * 
 	 * @throws IOException 
 	 * 
 	 */
@@ -239,15 +315,18 @@ public class ClientThread implements Runnable {
 
 
 	/**
-	 * @param input
+	 * deletes file from the server files
+	 * 
+	 * @param input line from client
+	 * @throws SQLException 
 	 */
-	private void delete(String input) {
+	private void delete(String input) throws SQLException {
 		String operation = input.substring(0,1);
 		String file = getContentFromCommand(input);
 		File f;
 		if (file.startsWith("/")) f = new File(parentPath + file.substring(1));
 		else f = new File(systemPath + File.separator + file);
-		//database.deleteFile(f.getName());
+		database.deleteFile(f.getName());
 		f.delete();
 		if (operation.equals("R")) messageToClient.println("250 RMD was successful");
 		else messageToClient.println("250 DELE was successful");
@@ -255,20 +334,26 @@ public class ClientThread implements Runnable {
 
 
 	/**
-	 * @param input
+	 * creates directory on server
+	 * 
+	 * @param input line from client
+	 * @throws SQLException 
 	 */
-	private void createDirectory(String input) {
+	private void createDirectory(String input) throws SQLException {
 		String directoryName = getContentFromCommand(input);
 		File f;
 		if (directoryName.startsWith("/")) f = new File(parentPath + directoryName.substring(1));
 		else f = new File(systemPath + File.separator + directoryName);
-	//	database.addFile(f.getName(), user);
+		database.addFile(f.getName(), user);
 		f.mkdir();
+		messageToClient.println("257 Directory was succefully created");
 	}
 
 
 	/**
-	 * @param input
+	 * sends to client currently working directory
+	 * 
+	 * @param input line from client
 	 */
 	private void pwd() {
 		messageToClient.println("257 \"" + virtualPath + "\" is your current location");
@@ -276,6 +361,8 @@ public class ClientThread implements Runnable {
 
 
 	/**
+	 * list files from current directory
+	 * 
 	 * @throws IOException 
 	 * @throws SQLException 
 	 */
@@ -284,6 +371,7 @@ public class ClientThread implements Runnable {
 		PrintWriter sendList = new PrintWriter(dataSocket.getOutputStream(), true);
 		File[] list = new File(systemPath).listFiles();
 		for (File f : list) {
+			if (f.getName().equals("..") || f.getName().equals(".")) continue;
 			/*String rigths;
 			if (f.isDirectory()) rigths="d";
 			else rigths="-";
@@ -313,7 +401,8 @@ public class ClientThread implements Runnable {
 			String filename = f.getName();
 			String line = rigths + "  " + hardLinks + "  " + owner + "  " + group + "  " + size + "  " + time + "  " + filename;
 			sendList.println(line);*/
-			String[] info = database.getFileInformations(f.getName());
+			//TODO filename - full path
+			String[] info = database.getFileInformations(f.getName()); 
 			String rights = null;
 			if (f.isDirectory()) rights="d";
 			else rights="-";
@@ -342,15 +431,15 @@ public class ClientThread implements Runnable {
 			
 			sendList.println(rights + "  " + info[0] + "  " + info[1] + "  " + info[2] + "  " + f.length() + "  " + time + "  " + f.getName());
 		}
-		//sendList.println("drwx--x--x    3 a4417886   a4417886         4096 Jan  3 18:27 ..");
 		dataSocket.close();
 		dataSocketServer.close();
 		messageToClient.println("226 Transfer complete");
 	}
 
-
 	/**
-	 * @param input
+	 * comes to directory passed in line
+	 * 
+	 * @param input line from client
 	 */
 	private void cwd(String input) {
 		String path = getContentFromCommand(input);
@@ -362,11 +451,14 @@ public class ClientThread implements Runnable {
 			virtualPath += File.separator + path;
 			systemPath += virtualPath;
 		}
+		messageToClient.println("250 OK. Current directory is" + virtualPath);
 	}
 
 
 	/**
-	 * @param input
+	 * changes rights of file on server (in database)
+	 * 
+	 * @param input line from client
 	 * @throws SQLException 
 	 */
 	private void changeRights(String input) throws SQLException {
@@ -376,18 +468,25 @@ public class ClientThread implements Runnable {
 		String ownerRights = String.valueOf(rights.charAt(0));
 		String groupRights = String.valueOf(rights.charAt(1));
 		database.changeFileRights(filename, ownerRights, groupRights);
-		
+		messageToClient.println("200 Permissions changed on " + filename);
 	}
 
 
 	/**
-	 * @param input
+	 * reaction for unknown command
+	 * 
+	 * @param input line from client
 	 */
 	private void unknownCommand(String input) {
 		messageToClient.println("502 Command not implemented");
 		
 	}
 	
+	/**
+	 * @param input
+	 * @param output
+	 * @throws IOException
+	 */
 	private void moveFile(BufferedInputStream input, BufferedOutputStream output) throws IOException {
 		byte[] buffer = new byte[4096];
 		int bytesRead = 0;
@@ -397,10 +496,21 @@ public class ClientThread implements Runnable {
 		output.flush();
 	}
 	
+	/**
+	 * gets content from command, for example: command: USER username; method returns username
+	 * 
+	 * @param input line from client
+	 * @return string with content of line from client without command name
+	 */
 	private String getContentFromCommand(String input) {
 		return input.substring(input.indexOf(" ")+1);
 	}
 	
+	/**
+	 * creates new timerTask
+	 * 
+	 * @return new TimerTask
+	 */
 	private TimerTask createNewTimerTask() {
 		return new TimerTask() {
 			@Override
@@ -412,6 +522,9 @@ public class ClientThread implements Runnable {
 		};
 	}
 	
+	/**
+	 * resets timer
+	 */
 	private void resetDisconnectionTimer() {
 		disconnectTimer.cancel();
 		disconnectTimer = new Timer();
@@ -419,6 +532,9 @@ public class ClientThread implements Runnable {
 		disconnectTimer.schedule(disconnectTask, 60*1000);
 	}
 	
+	/**
+	 * cancels timer
+	 */
 	public void cancelDisconectDeamon() {
 		if (disconnectTimer != null) {
 			disconnectTimer.cancel();
