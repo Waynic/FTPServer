@@ -44,7 +44,10 @@ public class ClientThread implements Runnable {
 	 * Socket for transfering files
 	 */
 	private Socket dataSocket = null;
-	
+
+	BufferedInputStream inputStream = null;
+	BufferedOutputStream outputStream = null;
+
 	/**
 	 * parent path of server files (everything before "serverFiles" directory)
 	 */
@@ -57,12 +60,12 @@ public class ClientThread implements Runnable {
 	 * wroking virtual path (for showing user his position etc.)
 	 */
 	private String virtualPath = null;
-	
+
 	/**
 	 * when true, then server will disconnect client
 	 */
 	private boolean disconnectClient = false;
-	
+
 	/**
 	 * timer for server disconnection
 	 */
@@ -71,17 +74,17 @@ public class ClientThread implements Runnable {
 	 * task for disconnecting
 	 */
 	private TimerTask disconnectTask = null;
-	
+
 	/**
 	 * manages database
 	 */
 	private DB database = null;
-	
+
 	/**
 	 * sends messages to client side
 	 */
 	private PrintWriter messageToClient;
-	
+
 	/**
 	 * name of user which is logged to the server by this thread
 	 */
@@ -119,9 +122,7 @@ public class ClientThread implements Runnable {
 			String inputLine;
 			sendWelcomeMessage();
 			while (!clientSocket.isClosed() && ((inputLine = messageFromClient.readLine()) != null)) {
-				 if (disconnectClient) {
-					 break;
-				 }
+				if (disconnectClient) break;
 				doRequestedCommand(inputLine);
 			}
 			cancelDisconectDeamon();
@@ -135,7 +136,7 @@ public class ClientThread implements Runnable {
 			e.printStackTrace();
 		}
 	}
-	
+
 	/**
 	 * sends welcome message
 	 */
@@ -144,9 +145,9 @@ public class ClientThread implements Runnable {
 		messageToClient.println("220-This is a private system - No anonymous login");
 		messageToClient.println("220 You will be disconnected after 1 minute of inactivity.");
 	}
-	
+
 	/**
-	 * Many ifs - manages to do what it have to when client sends command
+	 * Many if's - manages to do what it have to when client sends command
 	 * 
 	 * @param input line from client
 	 * @throws IOException
@@ -234,7 +235,6 @@ public class ClientThread implements Runnable {
 	 */
 	private void openPassiveMode() throws UnknownHostException, IOException {
 		dataSocketServer = new ServerSocket(3020);
-		//dataSocket = dataSocketServer.accept();
 		if (!dataSocketServer.isClosed()) {
 			messageToClient.println("227 Entering Passive Mode (127,0,0,1,11,204)");
 		}
@@ -257,14 +257,16 @@ public class ClientThread implements Runnable {
 		String filename = getContentFromCommand(input);
 		messageToClient.println("150 Opening binary mode data connection for '" + filename + "'");
 		File f = new File(systemPath + File.separator + filename);
-		BufferedInputStream in = new BufferedInputStream(new FileInputStream(f));
-		BufferedOutputStream out = new BufferedOutputStream(dataSocket.getOutputStream());
-		moveFile(in,out);
-		out.close();
-		in.close();
+		inputStream = new BufferedInputStream(new FileInputStream(f));
+		outputStream = new BufferedOutputStream(dataSocket.getOutputStream());
+		moveFile(inputStream,outputStream);
+		outputStream.close();
+		inputStream.close();
 		dataSocket.close();
 		dataSocketServer.close();
 		messageToClient.println("226 Transfer complete");
+		inputStream = null;
+		outputStream = null;
 	}
 
 
@@ -280,16 +282,19 @@ public class ClientThread implements Runnable {
 		// TODO append and filename
 		String filename = getContentFromCommand(input);
 		File f = new File(systemPath + File.separator + filename);
-		database.addFile(virtualPath + "/" + filename, user);
-		BufferedInputStream in = new BufferedInputStream(dataSocket.getInputStream());
-		BufferedOutputStream out = new BufferedOutputStream(new FileOutputStream(f));
+		if (virtualPath.equals("/")) database.addFile(virtualPath + filename, user);
+		else database.addFile(virtualPath + "/" + filename, user);
+		inputStream = new BufferedInputStream(dataSocket.getInputStream());
+		outputStream = new BufferedOutputStream(new FileOutputStream(f));
 		messageToClient.println("150 FILE: " + filename);
-		moveFile(in, out);
-		out.close();
-		in.close();
+		moveFile(inputStream, outputStream);
+		outputStream.close();
+		inputStream.close();
 		dataSocket.close();
 		dataSocketServer.close();
 		messageToClient.println("226 Transfer complete");
+		inputStream = null;
+		outputStream = null;
 	}
 
 
@@ -321,15 +326,34 @@ public class ClientThread implements Runnable {
 	 * @throws SQLException 
 	 */
 	private void delete(String input) throws SQLException {
+		// 550 Permission denied
+		boolean badUser = false;
 		String operation = input.substring(0,1);
 		String file = getContentFromCommand(input);
 		File f;
-		if (file.startsWith("/")) f = new File(parentPath + file.substring(1));
-		else f = new File(systemPath + File.separator + file);
-		database.deleteFile(f.getName());
-		f.delete();
-		if (operation.equals("R")) messageToClient.println("250 RMD was successful");
-		else messageToClient.println("250 DELE was successful");
+		if (file.startsWith("/")) {
+			if (!database.checkIfUserHavePermissionToWrite(user, file)) {
+				badUser=true;
+				messageToClient.println("550 Permission denied");
+			}
+			else file = parentPath + file;
+		}
+		else {
+			if (!database.checkIfUserHavePermissionToWrite(user, file)) {
+				badUser=true;
+				messageToClient.println("550 Permission denied");
+			}
+			else file = systemPath + File.separator + file;
+		}
+		if (!badUser) {
+			f = new File(file);
+			database.checkIfUserHavePermissionToWrite(user, file);
+			if (virtualPath.equals("/")) database.deleteFile(virtualPath + f.getName());
+			else database.deleteFile(virtualPath + "/" + f.getName());
+			f.delete();
+			if (operation.equals("R")) messageToClient.println("250 RMD was successful");
+			else messageToClient.println("250 DELE was successful");
+		}
 	}
 
 
@@ -344,7 +368,8 @@ public class ClientThread implements Runnable {
 		File f;
 		if (directoryName.startsWith("/")) f = new File(parentPath + directoryName.substring(1));
 		else f = new File(systemPath + File.separator + directoryName);
-		database.addFile(f.getName(), user);
+		if (virtualPath.equals("/")) database.addFile(virtualPath + f.getName(), user);
+		else database.addFile(virtualPath + "/" + f.getName(), user);
 		f.mkdir();
 		messageToClient.println("257 Directory was succefully created");
 	}
@@ -402,7 +427,9 @@ public class ClientThread implements Runnable {
 			String line = rigths + "  " + hardLinks + "  " + owner + "  " + group + "  " + size + "  " + time + "  " + filename;
 			sendList.println(line);*/
 			//TODO filename - full path
-			String[] info = database.getFileInformations(f.getName()); 
+			String[] info = null;
+			if (virtualPath.equals("/")) info = database.getFileInformations(virtualPath + f.getName());
+			else info = database.getFileInformations(virtualPath + "/" + f.getName());
 			String rights = null;
 			if (f.isDirectory()) rights="d";
 			else rights="-";
@@ -414,7 +441,7 @@ public class ClientThread implements Runnable {
 			else rights+="-";
 			if (info[6].equals("1")) rights+="w";
 			else rights+="-";
-			
+
 			Calendar fileTime = Calendar.getInstance();
 			fileTime.setTimeInMillis(f.lastModified());
 			int currentYear = Calendar.getInstance().get(Calendar.YEAR);
@@ -428,7 +455,7 @@ public class ClientThread implements Runnable {
 			}
 			Date date = new Date(f.lastModified());
 			time = format.format(date);
-			
+
 			sendList.println(rights + "  " + info[0] + "  " + info[1] + "  " + info[2] + "  " + f.length() + "  " + time + "  " + f.getName());
 		}
 		dataSocket.close();
@@ -442,18 +469,40 @@ public class ClientThread implements Runnable {
 	 * @param input line from client
 	 */
 	private void cwd(String input) {
+		//TODO Check if directory exists
+		boolean directoryExists = true;
 		String path = getContentFromCommand(input);
 		if (path.startsWith("/")) {
-			virtualPath = path;
-			systemPath = parentPath + path;
+			File f = new File(parentPath + path);
+			if (!f.exists()) {
+				messageToClient.println("550 Can't change directory to " + path + ": No such file or directory");
+				directoryExists = false;
+			}
+			if (directoryExists) {
+				virtualPath = path;
+				systemPath = parentPath + path;
+				messageToClient.println("250 OK. Current directory is" + virtualPath);
+			}
 		}
 		else {
-			virtualPath += File.separator + path;
-			systemPath += virtualPath;
+			if (path.equals("..")) {
+				virtualPath = virtualPath.substring(0,virtualPath.lastIndexOf("/"));
+				systemPath = systemPath.substring(0,systemPath.lastIndexOf("/"));
+			}
+			else {
+				File f = new File(systemPath + File.separator + path);
+				if (!f.exists()) {
+					messageToClient.println("550 Can't change directory to " + virtualPath + "/" + path + ": No such file or directory");
+					directoryExists = false;
+				}
+				if (directoryExists) {
+					virtualPath += "/" + path;
+					systemPath += virtualPath;
+					messageToClient.println("250 OK. Current directory is" + virtualPath);
+				}
+			}
 		}
-		messageToClient.println("250 OK. Current directory is" + virtualPath);
 	}
-
 
 	/**
 	 * changes rights of file on server (in database)
@@ -479,9 +528,9 @@ public class ClientThread implements Runnable {
 	 */
 	private void unknownCommand(String input) {
 		messageToClient.println("502 Command not implemented");
-		
+
 	}
-	
+
 	/**
 	 * @param input
 	 * @param output
@@ -495,7 +544,7 @@ public class ClientThread implements Runnable {
 		}
 		output.flush();
 	}
-	
+
 	/**
 	 * gets content from command, for example: command: USER username; method returns username
 	 * 
@@ -505,7 +554,7 @@ public class ClientThread implements Runnable {
 	private String getContentFromCommand(String input) {
 		return input.substring(input.indexOf(" ")+1);
 	}
-	
+
 	/**
 	 * creates new timerTask
 	 * 
@@ -515,13 +564,13 @@ public class ClientThread implements Runnable {
 		return new TimerTask() {
 			@Override
 			public void run() {
-					disconnectClient = true;
+				disconnectClient = true;
 				//	messageToClient.print(-1);
-					//messageToClient.println("-1");
+				//messageToClient.println("-1");
 			}
 		};
 	}
-	
+
 	/**
 	 * resets timer
 	 */
@@ -531,7 +580,7 @@ public class ClientThread implements Runnable {
 		disconnectTask = createNewTimerTask();
 		disconnectTimer.schedule(disconnectTask, 60*1000);
 	}
-	
+
 	/**
 	 * cancels timer
 	 */

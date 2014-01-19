@@ -83,7 +83,6 @@ public class Server implements Runnable {
 		try {
 			serverSocket = new ServerSocket(serverPort);
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 	}
