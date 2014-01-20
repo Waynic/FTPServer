@@ -116,8 +116,13 @@ public class DB {
 				+ "`group_id` int(11) NOT NULL, "
 				+ "`user_read` tinyint(1) NOT NULL DEFAULT '1', "
 				+ "`user_write` tinyint(1) NOT NULL DEFAULT '1', "
+				+ "`user_execute` tinyint(1) NOT NULL DEFAULT '0', "
 				+ "`group_read` tinyint(1) NOT NULL DEFAULT '0', "
 				+ "`group_write` tinyint(1) NOT NULL DEFAULT '0', "
+				+ "`group_execute` tinyint(1) NOT NULL DEFAULT '0', "
+				+ "`others_read` tinyint(1) NOT NULL DEFAULT '1', "
+				+ "`others_write` tinyint(1) NOT NULL DEFAULT '0', "
+				+ "`others_execute` tinyint(1) NOT NULL DEFAULT '0', "
 				+ "PRIMARY KEY  (`id`), "
 				+ "UNIQUE KEY `filename` (`filename`) "
 				+ ") ENGINE=MyISAM  DEFAULT CHARSET=latin2 AUTO_INCREMENT=2 ;" );
@@ -167,8 +172,9 @@ public class DB {
 		int userID = getUserID(owner);
 		int groupID = getGroupIDsOfUser(owner).get(1);
 		statement = connection.createStatement();
-		statement.executeUpdate("INSERT INTO `files`(`filename`, `owner_id`, `group_id`, `user_read`, `user_write`, `group_read`, `group_write`)"
-				+ " VALUES ('" + filename + "','" + userID + "','" + groupID + "',TRUE,TRUE,TRUE,FALSE)");
+		statement.executeUpdate("INSERT INTO `files`(`filename`, `owner_id`, `group_id`, `user_read`, `user_write`, `user_execute`, `group_read`,"
+				+ " `group_write`, `group_execute`, `others_read`, `others_write`, `others_execute`)"
+				+ " VALUES ('" + filename + "','" + userID + "','" + groupID + "',TRUE,TRUE,TRUE,TRUE,FALSE,FALSE,TRUE,FALSE,FALSE)");
 	}
 	
 	/**
@@ -239,16 +245,26 @@ public class DB {
 	 * @param filename name of file (path)
 	 * @param ownerRights represents owner rights (numeric like 7 or 5)
 	 * @param groupRights represents group rights (numeric like 7 or 5)
+	 * @param othersRights represents others rights (numeric like 7 or 5)
 	 * @throws SQLException
 	 */
-	public void changeFileRights(String filename, String ownerRights, String groupRights) throws SQLException {
+	public void changeFileRights(String filename, String ownerRights, String groupRights, String othersRights) throws SQLException {
 		int owner = Integer.parseInt(ownerRights);
 		int group = Integer.parseInt(groupRights);
-		String[] rights = adjustRights(owner,group);
+		int others = Integer.parseInt(othersRights);
+		String[] rights = adjustRights(owner,group,others);
 		statement = connection.createStatement();
-		statement.executeUpdate("UPDATE `files` SET (`user_read`,`user_write`,`group_read`,`group_write`)"
-		+ " VALUES ('" + rights[0] + "', '" + rights[1] + "', '" + rights[2] + "', '"
-				+ rights[3] + "') WHERE `filename`='" + filename + "'");
+		statement.executeUpdate("UPDATE `files` SET "
+				+ "`user_read`=" + rights[0]+ ", "
+				+ "`user_write`=" + rights[1] + ", "
+				+ "`user_execute`=" + rights[2] + ", "
+				+ "`group_read`=" + rights[3] + ", "
+				+ "`group_write`=" + rights[4] + ", "
+				+ "`group_execute`=" + rights[5] + ", "
+				+ "`others_read`=" + rights[6] + ", "
+				+ "`others_write`=" + rights[7] + ", "
+				+ "`others_execute`=" + rights[8]
+				+ " WHERE `filename`='" + filename + "'");
 	}
 	
 	/**
@@ -258,14 +274,20 @@ public class DB {
 	 * @param groupRights rights of group of file
 	 * @return
 	 */
-	private String[] adjustRights (int ownerRights, int groupRights) {
-		String[] rights = new String[4];
+	private String[] adjustRights (int ownerRights, int groupRights, int othersRights) {
+		String[] rights = new String[9];
 		String[] owner = transformRights(ownerRights);
 		String[] group = transformRights(groupRights);
+		String[] others = transformRights(othersRights);
 		rights[0]=owner[0];
 		rights[1]=owner[1];
-		rights[2]=group[0];
-		rights[3]=group[1];
+		rights[2]=owner[2];
+		rights[3]=group[0];
+		rights[4]=group[1];
+		rights[5]=group[2];
+		rights[6]=others[0];
+		rights[7]=others[1];
+		rights[8]=others[2];
 		return rights;
 	}
 	
@@ -276,22 +298,48 @@ public class DB {
 	 * @return
 	 */
 	private String[] transformRights(int rights) {
-		String[] newRights = new String[2];
-		if (rights==0) {
-			newRights[0]="FALSE";
-			newRights[1]="TRUE";
-		}
-		else if (rights==1) {
-			newRights[0]="TRUE";
-			newRights[1]="FALSE";
-		}
-		else if (rights==2) {
-			newRights[0]="FALSE";
-			newRights[1]="TRUE";
-		}
-		else {
-			newRights[0]="TRUE";
-			newRights[1]="TRUE";
+		String[] newRights = new String[3];
+		switch(rights) {
+			case 0:
+				newRights[0]="FALSE";
+				newRights[1]="FALSE";
+				newRights[2]="FALSE";
+				break;
+			case 1:
+				newRights[0]="FALSE";
+				newRights[1]="FALSE";
+				newRights[2]="TRUE";
+				break;
+			case 2:
+				newRights[0]="FALSE";
+				newRights[1]="TRUE";
+				newRights[2]="FALSE";
+				break;
+			case 3:
+				newRights[0]="FALSE";
+				newRights[1]="TRUE";
+				newRights[2]="TRUE";
+				break;
+			case 4:
+				newRights[0]="TRUE";
+				newRights[1]="FALSE";
+				newRights[2]="FALSE";
+				break;
+			case 5:
+				newRights[0]="TRUE";
+				newRights[1]="FALSE";
+				newRights[2]="TRUE";
+				break;
+			case 6:
+				newRights[0]="TRUE";
+				newRights[1]="TRUE";
+				newRights[2]="FALSE";
+				break;
+			case 7:
+				newRights[0]="TRUE";
+				newRights[1]="TRUE";
+				newRights[2]="TRUE";
+				break;
 		}
 		return newRights;
 	}
@@ -362,6 +410,23 @@ public class DB {
 		else return false;
 	}
 	
+	public boolean checkIfUserHavePermissionToExecute(String user, String filename) throws SQLException {
+		//TODO javadoc
+		statement = connection.createStatement();
+		int userID = getUserID(user);
+		resultSet = statement.executeQuery("SELECT `group_execute` OR (`user_execute` AND `owner_id`=" + userID + ") FROM "
+				+ "`files` AS `f` WHERE `f`.`filename`='" + filename + "' AND `f`.`group_id` IN "
+				+ "(SELECT `group_id` FROM `usergroup` WHERE `user_id`=" + userID + ")");
+		if (resultSet.next()) return check(resultSet.getString(1));
+		else return false;
+	}
+	
+	public boolean checkIfFileExists(String filename) throws SQLException {
+		statement = connection.createStatement();
+		resultSet = statement.executeQuery("SELECT `filename`='" + filename + "' FROM `files` WHERE `filename`='" + filename + "'");
+		if (resultSet.next()) return check(resultSet.getString(1));
+		else return false;
+	}
 	/**
 	 * checks state (used in {@link database.DB#checkIfUserHavePermissionToRead(String, String) and database.DB#checkIfUserHavePermissionToWrite(String, String)}
 	 * 
@@ -464,9 +529,6 @@ public class DB {
 			ArrayList<String> informations = new ArrayList<String>();
 			informations.add(resultSet.getString(1));
 			informations.add(resultSet.getString(2));
-			//String[] informations = new String[3];
-			//informations[0] = resultSet.getString(1);
-			//informations[1] = resultSet.getString(2);
 			ArrayList<Integer> groupID = getGroupIDsOfUser(username);
 			for (Integer i : groupID) {
 				statement = connection.createStatement();
@@ -474,13 +536,8 @@ public class DB {
 				if (resultSet.next()) informations.add(resultSet.getString(1));
 			}
 			return informations;
-			//resultSet = statement.executeQuery("SELECT `group` FROM `groups` WHERE `id`=" + groupID);
-			//informations[2] = resultSet.getString(1);
-			//return informations;
 		}
 		else {
-			//String[] error = new String[1];
-			//error[0] = "error";
 			ArrayList<String> error = null;
 			return error;
 		}
@@ -495,14 +552,20 @@ public class DB {
 	 * @throws SQLException
 	 */
 	public String[] getFileInformations(String filename) throws SQLException {
-		String[] informations = new String[7];
+		//TODO javadoc
+		String[] informations = new String[12];
 		informations[0] = getFileInformation(filename, "id");
 		informations[1] = getUserByID(getFileInformation(filename, "owner_id"));
 		informations[2] = getGroupByID(getFileInformation(filename, "group_id"));
 		informations[3] = getFileInformation(filename, "user_read");
 		informations[4] = getFileInformation(filename, "user_write");
-		informations[5] = getFileInformation(filename, "group_read");
-		informations[6] = getFileInformation(filename, "group_write");
+		informations[5] = getFileInformation(filename, "user_execute");
+		informations[6] = getFileInformation(filename, "group_read");
+		informations[7] = getFileInformation(filename, "group_write");
+		informations[8] = getFileInformation(filename, "group_execute");
+		informations[9] = getFileInformation(filename, "others_read");
+		informations[10] = getFileInformation(filename, "others_write");
+		informations[11] = getFileInformation(filename, "others_execute");
 		return informations;
 	}
 	
@@ -547,5 +610,17 @@ public class DB {
 		resultSet = statement.executeQuery("SELECT `" + columnName + "` FROM `files` WHERE `filename`='" + filename + "'");
 		if (resultSet.next()) return resultSet.getString(1);
 		else return null;
+	}
+	
+	public String getOthersReadPermission(String filename) throws SQLException {
+		return getFileInformation(filename, "others_read");
+	}
+	
+	public String getOthersWritePermission(String filename) throws SQLException {
+		return getFileInformation(filename, "others_write");
+	}
+	
+	public String getOthersExecutePermission(String filename) throws SQLException {
+		return getFileInformation(filename, "others_execute");
 	}
 }

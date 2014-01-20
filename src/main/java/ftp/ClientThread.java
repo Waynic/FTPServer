@@ -251,50 +251,80 @@ public class ClientThread implements Runnable {
 	 * 
 	 * @param input line from client
 	 * @throws IOException 
+	 * @throws SQLException 
 	 * @throws UnknownHostException 
 	 */
-	private void retr(String input) throws IOException {
+	private void retr(String input) throws IOException, SQLException {
+		boolean badUser = false;
 		String filename = getContentFromCommand(input);
-		messageToClient.println("150 Opening binary mode data connection for '" + filename + "'");
-		File f = new File(systemPath + File.separator + filename);
-		inputStream = new BufferedInputStream(new FileInputStream(f));
-		outputStream = new BufferedOutputStream(dataSocket.getOutputStream());
-		moveFile(inputStream,outputStream);
-		outputStream.close();
-		inputStream.close();
-		dataSocket.close();
-		dataSocketServer.close();
-		messageToClient.println("226 Transfer complete");
-		inputStream = null;
-		outputStream = null;
+		if (!filename.startsWith("/")) {
+			if (!virtualPath.equals("/")) filename = virtualPath + "/" + filename;
+			else filename = virtualPath + filename; 
+		}
+		if (database.getOthersReadPermission(filename).equals("0")) {
+			if (!database.checkIfUserHavePermissionToRead(user, filename)) {
+				badUser=true;
+				messageToClient.println("550 Permission denied");
+				dataSocket.close();
+				dataSocketServer.close();
+			}
+		}
+		if (!badUser) {
+			messageToClient.println("150 Opening binary mode data connection for '" + filename + "'");
+			File f = new File(parentPath + filename);
+			inputStream = new BufferedInputStream(new FileInputStream(f));
+			outputStream = new BufferedOutputStream(dataSocket.getOutputStream());
+			moveFile(inputStream,outputStream);
+			outputStream.close();
+			inputStream.close();
+			dataSocket.close();
+			dataSocketServer.close();
+			messageToClient.println("226 Transfer complete");
+			inputStream = null;
+			outputStream = null;
+		}
 	}
-
 
 	/**
 	 * manages of saving file on server
 	 * 
 	 * @param input line from client
-	 * @param b if true command is STOR; command APPE otherwise
+	 * @param isStor if true command is STOR; command APPE otherwise
 	 * @throws IOException 
 	 * @throws SQLException 
 	 */
-	private void getFile(String input, boolean b) throws IOException, SQLException {
-		// TODO append and filename
+	private void getFile(String input, boolean isStor) throws IOException, SQLException {
+		boolean badUser = false;
 		String filename = getContentFromCommand(input);
-		File f = new File(systemPath + File.separator + filename);
-		if (virtualPath.equals("/")) database.addFile(virtualPath + filename, user);
-		else database.addFile(virtualPath + "/" + filename, user);
-		inputStream = new BufferedInputStream(dataSocket.getInputStream());
-		outputStream = new BufferedOutputStream(new FileOutputStream(f));
-		messageToClient.println("150 FILE: " + filename);
-		moveFile(inputStream, outputStream);
-		outputStream.close();
-		inputStream.close();
-		dataSocket.close();
-		dataSocketServer.close();
-		messageToClient.println("226 Transfer complete");
-		inputStream = null;
-		outputStream = null;
+		if (!filename.startsWith("/")) {
+			if (virtualPath.equals("/")) filename = virtualPath + filename;
+			else filename = virtualPath + "/" + filename;
+		}
+		/*if (database.getOthersWritePermission(filename).equals("0")) {
+			if (!database.checkIfUserHavePermissionToWrite(user, filename)) {
+				badUser = true;
+				messageToClient.println("550 Permission denied");
+				dataSocket.close();
+				dataSocketServer.close();
+			}
+		}*/
+		if (!badUser) {
+			File f = new File(parentPath + filename);
+			if (database.checkIfFileExists(filename)) database.deleteFile(filename);
+			database.addFile(filename, user);
+			inputStream = new BufferedInputStream(dataSocket.getInputStream());
+			if (isStor) outputStream = new BufferedOutputStream(new FileOutputStream(f));
+			else outputStream = new BufferedOutputStream(new FileOutputStream(f, true));
+			messageToClient.println("150 FILE: " + filename);
+			moveFile(inputStream, outputStream);
+			outputStream.close();
+			inputStream.close();
+			dataSocket.close();
+			dataSocketServer.close();
+			messageToClient.println("226 Transfer complete");
+			inputStream = null;
+			outputStream = null;
+		}
 	}
 
 
@@ -309,9 +339,8 @@ public class ClientThread implements Runnable {
 			messageToClient.println("226 Abort accepted and completed");
 		}
 		else {
-			//TODO
-			//close buffers (have to make them into fields)
-			//ask how we should different files
+			outputStream.close();
+			inputStream.close();
 			dataSocket.close();
 			messageToClient.println("426 service request terminated abnormally");
 			messageToClient.println("226 Abort accepted and completed");
@@ -324,32 +353,26 @@ public class ClientThread implements Runnable {
 	 * 
 	 * @param input line from client
 	 * @throws SQLException 
+	 * @throws IOException 
 	 */
-	private void delete(String input) throws SQLException {
-		// 550 Permission denied
+	private void delete(String input) throws SQLException, IOException {
 		boolean badUser = false;
 		String operation = input.substring(0,1);
 		String file = getContentFromCommand(input);
 		File f;
-		if (file.startsWith("/")) {
-			if (!database.checkIfUserHavePermissionToWrite(user, file)) {
-				badUser=true;
-				messageToClient.println("550 Permission denied");
-			}
-			else file = parentPath + file;
+		if (!file.startsWith("/")) {
+			if (virtualPath.equals("/")) file = virtualPath + file;
+			else file = virtualPath + "/" + file;
 		}
-		else {
-			if (!database.checkIfUserHavePermissionToWrite(user, file)) {
-				badUser=true;
+		if (database.getOthersExecutePermission(file).equals("0")) {
+			if (!database.checkIfUserHavePermissionToExecute(user, file)) {
+				badUser = true;
 				messageToClient.println("550 Permission denied");
 			}
-			else file = systemPath + File.separator + file;
 		}
 		if (!badUser) {
-			f = new File(file);
-			database.checkIfUserHavePermissionToWrite(user, file);
-			if (virtualPath.equals("/")) database.deleteFile(virtualPath + f.getName());
-			else database.deleteFile(virtualPath + "/" + f.getName());
+			f = new File(parentPath + file);
+			//database.checkIfUserHavePermissionToWrite(user, file);
 			f.delete();
 			if (operation.equals("R")) messageToClient.println("250 RMD was successful");
 			else messageToClient.println("250 DELE was successful");
@@ -397,35 +420,6 @@ public class ClientThread implements Runnable {
 		File[] list = new File(systemPath).listFiles();
 		for (File f : list) {
 			if (f.getName().equals("..") || f.getName().equals(".")) continue;
-			/*String rigths;
-			if (f.isDirectory()) rigths="d";
-			else rigths="-";
-			Path file = Paths.get(f.getAbsolutePath());
-			PosixFileAttributes att = Files.getFileAttributeView(file, PosixFileAttributeView.class).readAttributes();
-			rigths += PosixFilePermissions.toString(att.permissions());
-			//to do
-			String hardLinks = "2";
-			UserPrincipal o = att.owner();
-			GroupPrincipal g = att.group();
-			String owner = o.getName();
-			String group = g.getName();
-			String size = String.valueOf(f.length());
-			Calendar fileTime = Calendar.getInstance();
-			fileTime.setTimeInMillis(f.lastModified());
-			int currentYear = Calendar.getInstance().get(Calendar.YEAR);
-			String time;
-			SimpleDateFormat format;
-			if (fileTime.get(Calendar.YEAR) == currentYear) {
-				format = new SimpleDateFormat("MMM  dd H:m");
-			}
-			else {
-				format = new SimpleDateFormat("MM dd YYYY");
-			}
-			Date date = new Date(f.lastModified());
-			time = format.format(date);
-			String filename = f.getName();
-			String line = rigths + "  " + hardLinks + "  " + owner + "  " + group + "  " + size + "  " + time + "  " + filename;
-			sendList.println(line);*/
 			//TODO filename - full path
 			String[] info = null;
 			if (virtualPath.equals("/")) info = database.getFileInformations(virtualPath + f.getName());
@@ -437,10 +431,20 @@ public class ClientThread implements Runnable {
 			else rights+="-";
 			if (info[4].equals("1")) rights+="w";
 			else rights+="-";
-			if (info[5].equals("1")) rights+="r";
+			if (info[5].equals("1")) rights+="x";
 			else rights+="-";
-			if (info[6].equals("1")) rights+="w";
+			if (info[6].equals("1")) rights+="r";
 			else rights+="-";
+			if (info[7].equals("1")) rights+="w";
+			else rights+="-";
+			if (info[8].equals("1")) rights+="x";
+			else rights+="-";
+			if (info[9].equals("1")) rights+="r";
+			else rights+="-";
+			if (info[10].equals("1")) rights+="w";
+			else rights+="-";
+			if (info[11].equals("1")) rights+="x";
+			else rights+="-"; 
 
 			Calendar fileTime = Calendar.getInstance();
 			fileTime.setTimeInMillis(f.lastModified());
@@ -511,12 +515,18 @@ public class ClientThread implements Runnable {
 	 * @throws SQLException 
 	 */
 	private void changeRights(String input) throws SQLException {
+		//TODO check username
 		String line = getContentFromCommand(input);
-		String filename = line.substring(0, line.indexOf(" ") +1 );
+		String filename = line.substring(0, line.indexOf(" "));
+		if(!filename.startsWith("/")) {
+			if (virtualPath.equals("/")) filename = virtualPath + filename;
+			else filename = virtualPath + "/" + filename;
+		}
 		String rights = getContentFromCommand(line);
 		String ownerRights = String.valueOf(rights.charAt(0));
 		String groupRights = String.valueOf(rights.charAt(1));
-		database.changeFileRights(filename, ownerRights, groupRights);
+		String othersRights = String.valueOf(rights.charAt(2));
+		database.changeFileRights(filename, ownerRights, groupRights, othersRights);
 		messageToClient.println("200 Permissions changed on " + filename);
 	}
 
