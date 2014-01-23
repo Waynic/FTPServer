@@ -142,7 +142,7 @@ public class ClientThread implements Runnable {
 	 */
 	private void sendWelcomeMessage() {		
 		messageToClient.println("220---------- Welcome to Fortun server [privsep] ----------");
-		messageToClient.println("220-This is a private system - No anonymous login");
+		messageToClient.println("220-Can login as anounymous");
 		messageToClient.println("220 You will be disconnected after 1 minute of inactivity.");
 	}
 
@@ -308,6 +308,12 @@ public class ClientThread implements Runnable {
 				dataSocketServer.close();
 			}
 		}*/
+		if (user.equals("anonymous")) {
+			messageToClient.println("550 Permission denied");
+			dataSocket.close();
+			dataSocketServer.close();
+			return ;
+		}
 		if (!badUser) {
 			File f = new File(parentPath + filename);
 			if (database.checkIfFileExists(filename)) database.deleteFile(filename);
@@ -364,8 +370,12 @@ public class ClientThread implements Runnable {
 			if (virtualPath.equals("/")) file = virtualPath + file;
 			else file = virtualPath + "/" + file;
 		}
-		if (database.getOthersExecutePermission(file).equals("0")) {
+		if (database.getOthersExecutePermission(file).equals("0") || database.getOthersWritePermission(file).equals("0")) {
 			if (!database.checkIfUserHavePermissionToExecute(user, file)) {
+				badUser = true;
+				messageToClient.println("550 Permission denied");
+			}
+			if (database.checkIfUserHavePermissionToWrite(user, file)) {
 				badUser = true;
 				messageToClient.println("550 Permission denied");
 			}
@@ -387,6 +397,10 @@ public class ClientThread implements Runnable {
 	 * @throws SQLException 
 	 */
 	private void createDirectory(String input) throws SQLException {
+		if (user.equals("anonymous")) {
+			messageToClient.println("550 Permission denied");
+			return ;
+		}
 		String directoryName = getContentFromCommand(input);
 		File f;
 		if (directoryName.startsWith("/")) f = new File(parentPath + directoryName.substring(1));
@@ -420,7 +434,6 @@ public class ClientThread implements Runnable {
 		File[] list = new File(systemPath).listFiles();
 		for (File f : list) {
 			if (f.getName().equals("..") || f.getName().equals(".")) continue;
-			//TODO filename - full path
 			String[] info = null;
 			if (virtualPath.equals("/")) info = database.getFileInformations(virtualPath + f.getName());
 			else info = database.getFileInformations(virtualPath + "/" + f.getName());
@@ -473,7 +486,6 @@ public class ClientThread implements Runnable {
 	 * @param input line from client
 	 */
 	private void cwd(String input) {
-		//TODO Check if directory exists
 		boolean directoryExists = true;
 		String path = getContentFromCommand(input);
 		if (path.startsWith("/")) {
@@ -521,6 +533,12 @@ public class ClientThread implements Runnable {
 		if(!filename.startsWith("/")) {
 			if (virtualPath.equals("/")) filename = virtualPath + filename;
 			else filename = virtualPath + "/" + filename;
+		}
+		if (database.getOthersWritePermission(filename).equals("0")) {
+			if (!database.checkIfUserHavePermissionToWrite(user, filename)) {
+				messageToClient.println("550 Permission denied");
+				return ;
+			}
 		}
 		String rights = getContentFromCommand(line);
 		String ownerRights = String.valueOf(rights.charAt(0));

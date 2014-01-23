@@ -132,6 +132,8 @@ public class DB {
 				+ "`user_id` int(11) NOT NULL, "
 				+ "`group_id` int(11) NOT NULL "
 				+") ENGINE=MyISAM DEFAULT CHARSET=latin2;");
+		
+		addUser("anonymous", "anonymous", 2);
 	}
 	
 	/**
@@ -272,7 +274,7 @@ public class DB {
 	 * 
 	 * @param ownerRights rights of owner of file
 	 * @param groupRights rights of group of file
-	 * @return
+	 * @return array of Strings with adequate rights (TRUE or FALSE)
 	 */
 	private String[] adjustRights (int ownerRights, int groupRights, int othersRights) {
 		String[] rights = new String[9];
@@ -294,8 +296,8 @@ public class DB {
 	/**
 	 * Transform rights from int to 'TRUE', 'FALSE'
 	 * 
-	 * @param rights owner or group rights
-	 * @return
+	 * @param rights owner or group rights or others rights
+	 * @return transformed numeric rights to TRUE/FALSE
 	 */
 	private String[] transformRights(int rights) {
 		String[] newRights = new String[3];
@@ -410,6 +412,14 @@ public class DB {
 		else return false;
 	}
 	
+	/**
+	 * checks if user have permission to execute file
+	 * 
+	 * @param user name of user to check
+	 * @param filename name of file to check
+	 * @return true if user have permission to execute file; false otherwise
+	 * @throws SQLException
+	 */
 	public boolean checkIfUserHavePermissionToExecute(String user, String filename) throws SQLException {
 		//TODO javadoc
 		statement = connection.createStatement();
@@ -421,6 +431,13 @@ public class DB {
 		else return false;
 	}
 	
+	/**
+	 * checks if file exists in database
+	 * 
+	 * @param filename name of file to check
+	 * @return true if file exists; false otherwise
+	 * @throws SQLException
+	 */
 	public boolean checkIfFileExists(String filename) throws SQLException {
 		statement = connection.createStatement();
 		resultSet = statement.executeQuery("SELECT `filename`='" + filename + "' FROM `files` WHERE `filename`='" + filename + "'");
@@ -431,7 +448,7 @@ public class DB {
 	 * checks state (used in {@link database.DB#checkIfUserHavePermissionToRead(String, String) and database.DB#checkIfUserHavePermissionToWrite(String, String)}
 	 * 
 	 * @param result true if database returned 1; false otherwise
-	 * @return
+	 * @return true if result set returned 1; false otherwise
 	 */
 	private boolean check(String result) {
 		if (Integer.parseInt(result) == 1) return true;
@@ -612,14 +629,35 @@ public class DB {
 		else return null;
 	}
 	
+	/**
+	 * Checks if others have permission to read file
+	 * 
+	 * @param filename name of file to check
+	 * @return true if others have permission to read file; false otherwise
+	 * @throws SQLException
+	 */
 	public String getOthersReadPermission(String filename) throws SQLException {
 		return getFileInformation(filename, "others_read");
 	}
 	
+	/**
+	 * Checks if others have permission to write to file
+	 * 
+	 * @param filename name of file to check
+	 * @return true if others have permission to write to file; false otherwise
+	 * @throws SQLException
+	 */
 	public String getOthersWritePermission(String filename) throws SQLException {
 		return getFileInformation(filename, "others_write");
 	}
 	
+	/**
+	 * Checks if others have permission to execute file
+	 * 
+	 * @param filename name of file to check
+	 * @return true if others have permission to execute file; false otherwise
+	 * @throws SQLException
+	 */
 	public String getOthersExecutePermission(String filename) throws SQLException {
 		return getFileInformation(filename, "others_execute");
 	}
